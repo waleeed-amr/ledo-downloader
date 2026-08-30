@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ledo Admin Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="login-view" class="container">
+        <div class="card" style="max-width: 400px; margin: 100px auto;">
+            <h2>Admin Login</h2>
+            <div class="input-group">
+                <input type="password" id="admin-key" placeholder="Enter Admin Key" autocomplete="off">
+            </div>
+            <button id="btn-login" class="btn">Login</button>
+            <div id="login-error" style="color: #ef4444; margin-top: 10px; font-size: 14px;"></div>
+        </div>
+    </div>
+
+    <div id="dashboard-view" class="container" style="display: none;">
+        <header>
+            <h2>Ledo Telemetry Dashboard</h2>
+            <button id="btn-logout" class="btn btn-outline">Logout</button>
+        </header>
+
+        <div class="card">
+            <h3>Recent Crash Reports</h3>
+            <div class="table-responsive">
+                <table id="crash-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Category</th>
+                            <th>Domain</th>
+                            <th>Message</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="crash-tbody">
+                        <tr><td colspan="5" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -5,19 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ledo Admin Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="login-view" class="container" style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
         <div class="card" style="width: 100%; max-width: 420px; margin: 0 auto;">
             <h2>Admin Login</h2>
-            <div class="input-group">
-                <input type="email" id="admin-email" placeholder="Email Address" autocomplete="off" required>
-            </div>
-            <div class="input-group">
-                <input type="password" id="admin-password" placeholder="Password" autocomplete="off" required>
-            </div>
-            <button id="btn-login" class="btn">Login to Dashboard</button>
+            <form id="login-form">
+                <div class="input-group">
+                    <input type="email" id="admin-email" placeholder="Email Address" autocomplete="off" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="admin-password" placeholder="Password" autocomplete="off" required>
+                </div>
+                <button type="submit" id="btn-login" class="btn">Login to Dashboard</button>
+            </form>
             <div id="login-error"></div>
         </div>
     </div>

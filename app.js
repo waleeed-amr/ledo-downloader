@@ -40,7 +40,10 @@ onAuthStateChanged(auth, (user) => {
     }
 });
 
-btnLogin.addEventListener('click', async () => {
+const loginForm = document.getElementById('login-form');
+
+loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
     const email = adminEmailInput.value;
     const pwd = adminPasswordInput.value;
     if (!email || !pwd) {

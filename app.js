@@ -21,16 +21,15 @@ const loginView = document.getElementById('login-view');
 const dashboardView = document.getElementById('dashboard-view');
 const btnLogin = document.getElementById('btn-login');
 const btnLogout = document.getElementById('btn-logout');
-const adminKeyInput = document.getElementById('admin-key');
+const adminEmailInput = document.getElementById('admin-email');
+const adminPasswordInput = document.getElementById('admin-password');
 const loginError = document.getElementById('login-error');
 const crashTbody = document.getElementById('crash-tbody');
-
-const ADMIN_EMAIL = "admin@ledodown.local";
 
 let unsubscribeReports = null;
 
 onAuthStateChanged(auth, (user) => {
-    if (user && user.email === ADMIN_EMAIL) {
+    if (user) {
         loginView.style.display = 'none';
         dashboardView.style.display = 'block';
         loadReports();
@@ -42,14 +41,19 @@ onAuthStateChanged(auth, (user) => {
 });
 
 btnLogin.addEventListener('click', async () => {
-    const pwd = adminKeyInput.value;
-    if (!pwd) return;
+    const email = adminEmailInput.value;
+    const pwd = adminPasswordInput.value;
+    if (!email || !pwd) {
+        loginError.innerText = "Please enter both email and password.";
+        return;
+    }
     
     loginError.innerText = "Logging in...";
     try {
-        await signInWithEmailAndPassword(auth, ADMIN_EMAIL, pwd);
+        await signInWithEmailAndPassword(auth, email, pwd);
         loginError.innerText = "";
-        adminKeyInput.value = "";
+        adminEmailInput.value = "";
+        adminPasswordInput.value = "";
     } catch (e) {
         loginError.innerText = "Invalid admin credentials.";
         console.error(e);

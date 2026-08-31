@@ -327,7 +327,7 @@ async function loadAllData() {
 
 function subscribeTickets() {
   if (!state.currentUser) return;
-  const q = query(collection(db, "support_tickets"), orderBy("createdAt", "desc"), limit(500));
+  const q = query(collection(db, "chats"), orderBy("lastUpdated", "desc"), limit(500));
   const unsub = onSnapshot(
     q,
     (snapshot) => {
@@ -1002,7 +1002,7 @@ function closeTicketModal() {
 async function updateTicketStatus(status) {
   if (!state.selectedTicket) return;
   try {
-    await updateDoc(doc(db, "support_tickets", state.selectedTicket.id), {
+    await updateDoc(doc(db, "chats", state.selectedTicket.id), {
       status,
       updatedAt: serverTimestamp(),
     });
@@ -1032,14 +1032,15 @@ async function sendReply() {
   btn.disabled = true;
   btn.querySelector("span").textContent = "Sending…";
   try {
-    await addDoc(collection(db, `users/${state.selectedTicket.userId}/messages`), {
+    const userId = state.selectedTicket.userId || state.selectedTicket.id;
+    await addDoc(collection(db, `chats/${userId}/messages`), {
       text,
-      fromAdmin: true,
+      isAdmin: true,
       createdAt: serverTimestamp(),
     });
     // mark ticket as in_progress if open
     if ((state.selectedTicket.status || "open") === "open") {
-      await updateDoc(doc(db, "support_tickets", state.selectedTicket.id), {
+      await updateDoc(doc(db, "chats", state.selectedTicket.id), {
         status: "in_progress",
         updatedAt: serverTimestamp(),
       });

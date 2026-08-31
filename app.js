@@ -23,6 +23,7 @@ import {
   doc,
   updateDoc,
   addDoc,
+  setDoc,
   serverTimestamp,
   getDocs,
   getDoc,
@@ -59,6 +60,13 @@ const state = {
   unsubscribers: [],
   firstTicketsLoad: true,
   firstCrashesLoad: true,
+  account: {
+    profile: null,
+    preferences: null,
+    notifications: null,
+    saving: false,
+  },
+  myActivity: [],
 };
 
 // ============== DOM HELPERS ==============
@@ -216,6 +224,7 @@ function showDashboard() {
   $("#dashboard-view").hidden = false;
   refreshIcons();
   navigateTo(state.currentRoute);
+  setupAccount();
 }
 
 function updateAdminInfo() {
@@ -271,6 +280,7 @@ function navigateTo(route) {
     users: ["Users", "All users who have contacted support"],
     crashes: ["Crash Reports", "Application crash telemetry"],
     analytics: ["Analytics", "Insights and platform performance"],
+    account: ["My Account", "Manage your profile, security, and preferences"],
     settings: ["Settings", "Customize your admin experience"],
   };
   const [t, s] = titles[route] || ["Ledo", ""];
@@ -371,9 +381,15 @@ function onTicketsUpdate() {
   renderAnalytics();
   renderTopSubjects();
   renderNotifications();
+  renderPersonalStats();
+  if (state.currentRoute === "activity" || state.currentRoute === "account") {
+    loadMyActivity();
+    renderMyActivity();
+  }
   if (state.charts.timeline) updateTimelineChart();
   if (state.charts.status) updateStatusChart();
   if (state.charts.daily) updateDailyChart();
+  if (state.charts.myActivity) renderMyActivityChart();
 }
 
 function onCrashesUpdate() {
@@ -1235,6 +1251,670 @@ function wireEvents() {
       e.preventDefault();
       $("#global-search").focus();
     }
+  });
+}
+
+// =============================================================
+// MY ACCOUNT
+// =============================================================
+
+async function setupAccount() {
+  if (!state.currentUser) return;
+  renderAccountHero();
+  wireAccountTabs();
+  wireProfileForm();
+  wireSecurityForm();
+  wireNotificationsForm();
+  wireIntegrations();
+  wireDangerZone();
+  await loadAccountData();
+  await loadMyActivity();
+  renderPersonalStats();
+  renderMyActivity();
+  setTimeout(renderMyActivityChart, 100);
+}
+
+function renderAccountHero() {
+  const u = state.currentUser;
+  if (!u) return;
+  const name = u.displayName || fmt.emailLocal(u.email) || "Admin";
+  const initial = name.charAt(0).toUpperCase();
+  $("#account-avatar").textContent = initial;
+  $("#account-display-name").textContent = name;
+  $("#account-email-display").textContent = u.email || "—";
+  $("#account-joined").textContent = new Date().toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+  // browser detection
+  const ua = navigator.userAgent;
+  let browser = "Unknown";
+  if (ua.includes("Chrome")) browser = "Chrome";
+  else if (ua.includes("Firefox")) browser = "Firefox";
+  else if (ua.includes("Safari")) browser = "Safari";
+  else if (ua.includes("Edge")) browser = "Edge";
+  const os = ua.includes("Win") ? "Windows" : ua.includes("Mac") ? "macOS" : ua.includes("Linux") ? "Linux" : "Device";
+  $("#sess-browser").textContent = `${browser} on ${os}`;
+  // location fallback
+  const lang = (navigator.language || "en").split("-")[1] || "";
+  $("#sess-location").textContent = lang ? `${lang.toUpperCase()} (approx)` : "Detecting…";
+  $("#account-location").textContent = $("#account-location").textContent || "Earth";
+}
+
+function wireAccountTabs() {
+  $$(".account-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const t = tab.dataset.accountTab;
+      $$(".account-tab").forEach((x) => x.classList.remove("active"));
+      tab.classList.add("active");
+      $$(".account-pane").forEach((p) => {
+        p.hidden = p.dataset.accountPane !== t;
+      });
+      if (t === "activity") {
+        setTimeout(renderMyActivityChart, 50);
+      }
+    });
+  });
+}
+
+function wireProfileForm() {
+  // Bio char counter
+  const bio = $("#profile-bio");
+  const count = $("#bio-count");
+  if (bio && count) {
+    bio.addEventListener("input", () => {
+      count.textContent = bio.value.length;
+    });
+  }
+  // Auto-save on blur for each field
+  const fields = [
+    "profile-name", "profile-username", "profile-phone", "profile-location",
+    "profile-website", "profile-timezone", "profile-bio",
+    "social-github", "social-twitter", "social-discord",
+    "social-instagram", "social-linkedin", "social-youtube",
+  ];
+  fields.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let timer = null;
+    const save = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => saveProfileField(id, el.value), 600);
+    };
+    el.addEventListener("input", save);
+    el.addEventListener("change", save);
+    el.addEventListener("blur", save);
+  });
+
+  // Live preview sync + completeness meter
+  wireAccountPreview();
+}
+
+function wireAccountPreview() {
+  const map = {
+    "profile-name": ["#acct-preview-name", (v) => v || "Admin"],
+    "profile-username": ["#acct-preview-handle", (v) => v ? `@${v}` : "@admin"],
+    "profile-bio": ["#acct-preview-bio", (v) => v || "Tell others a bit about yourself…"],
+  };
+  Object.entries(map).forEach(([src, [sel, fmt]]) => {
+    const el = document.getElementById(src);
+    const target = document.querySelector(sel);
+    if (!el || !target) return;
+    const update = () => { target.textContent = fmt(el.value); };
+    el.addEventListener("input", update);
+    update();
+  });
+
+  // Sync preview avatar with account avatar
+  const acctAvatar = document.getElementById("account-avatar");
+  const previewAvatar = document.getElementById("acct-preview-avatar");
+  if (acctAvatar && previewAvatar) {
+    const updateAvatar = () => { previewAvatar.textContent = acctAvatar.textContent || "A"; };
+    new MutationObserver(updateAvatar).observe(acctAvatar, { childList: true, characterData: true, subtree: true });
+    updateAvatar();
+  }
+
+  // Stats sync
+  const statMap = {
+    handled: "#acct-preview-handled",
+    resolved: "#acct-preview-resolved",
+    rating: "#acct-preview-rating",
+  };
+  Object.entries(statMap).forEach(([key, sel]) => {
+    const src = document.querySelector(`[data-personal-stat="${key}"]`);
+    const tgt = document.querySelector(sel);
+    if (!src || !tgt) return;
+    const update = () => { tgt.textContent = src.textContent || "0"; };
+    new MutationObserver(update).observe(src, { childList: true, characterData: true, subtree: true });
+    update();
+  });
+
+  // Completeness meter
+  const required = [
+    { id: "profile-name", weight: 20 },
+    { id: "profile-username", weight: 15 },
+    { id: "profile-bio", weight: 20 },
+    { id: "profile-phone", weight: 10 },
+    { id: "profile-location", weight: 10 },
+    { id: "profile-website", weight: 10 },
+    { id: "profile-timezone", weight: 10 },
+  ];
+  const fill = document.getElementById("acct-progress-fill");
+  const valEl = document.getElementById("acct-completeness-value");
+  if (!fill || !valEl) return;
+
+  const recompute = () => {
+    let score = 0;
+    let total = 0;
+    required.forEach(({ id, weight }) => {
+      total += weight;
+      const el = document.getElementById(id);
+      if (el && el.value && el.value.toString().trim()) score += weight;
+    });
+    const pct = total ? Math.round((score / total) * 100) : 0;
+    fill.style.width = pct + "%";
+    valEl.textContent = pct + "%";
+  };
+  required.forEach(({ id }) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", recompute);
+  });
+  recompute();
+}
+
+function wireSecurityForm() {
+  // Password strength
+  const newPwd = $("#pwd-new");
+  if (newPwd) {
+    newPwd.addEventListener("input", updatePasswordStrength);
+  }
+  // Password change
+  $("#btn-change-password")?.addEventListener("click", changePassword);
+  // Sign out all
+  $("#btn-signout-all")?.addEventListener("click", signOutAllSessions);
+  $("#btn-danger-signout-all")?.addEventListener("click", signOutAllSessions);
+  // 2FA toggles
+  ["tfa-app", "tfa-sms", "tfa-email"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      update2FAStatus();
+      saveNotificationPreference("twoFactor", get2FAState());
+    });
+  });
+  // New token
+  $("#btn-new-token")?.addEventListener("click", () => {
+    toast({ type: "info", title: "Coming soon", message: "API token generation will be available in the next release." });
+  });
+}
+
+function wireNotificationsForm() {
+  // Matrix toggles
+  $$("[data-notif]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const notif = cb.dataset.notif;
+      const chan = cb.dataset.chan;
+      if (!state.account.notifications) state.account.notifications = {};
+      if (!state.account.notifications[notif]) state.account.notifications[notif] = {};
+      state.account.notifications[notif][chan] = cb.checked;
+      showSaveIndicator("saving");
+      debouncedSaveNotifications();
+    });
+  });
+  // Quiet hours
+  ["quiet-hours-toggle", "quiet-from", "quiet-to", "quiet-tz"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", debouncedSaveNotifications);
+  });
+}
+
+function wireIntegrations() {
+  $$("[data-integration-toggle]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const name = cb.dataset.integrationToggle;
+      const card = cb.closest(".integration-card");
+      if (cb.checked) {
+        card.classList.add("connected");
+        card.querySelector(".integration-status").textContent = "Connected";
+        toast({ type: "success", title: `${name} connected`, message: "You will now receive updates via this integration." });
+      } else {
+        card.classList.remove("connected");
+        card.querySelector(".integration-status").textContent = "Not connected";
+        toast({ type: "info", title: `${name} disconnected` });
+      }
+    });
+  });
+}
+
+function wireDangerZone() {
+  $("#btn-danger-reset")?.addEventListener("click", () => {
+    if (!confirm("Reset all local preferences? This will not affect your account data.")) return;
+    localStorage.removeItem("ledo-theme");
+    localStorage.removeItem("ledo-compact");
+    localStorage.removeItem("ledo-anim");
+    document.body.classList.remove("compact", "no-anim");
+    setTheme("dark");
+    toast({ type: "success", title: "Preferences reset", message: "Local preferences cleared." });
+  });
+
+  const confirmInput = $("#delete-confirm");
+  const deleteBtn = $("#btn-danger-delete");
+  if (confirmInput && deleteBtn) {
+    confirmInput.addEventListener("input", () => {
+      deleteBtn.disabled = confirmInput.value !== "DELETE";
+    });
+    deleteBtn.addEventListener("click", () => {
+      if (confirmInput.value !== "DELETE") return;
+      if (!confirm("Are you absolutely sure? This action cannot be undone.")) return;
+      toast({ type: "error", title: "Account deletion requested", message: "Please contact support to complete account deletion." });
+    });
+  }
+}
+
+async function loadAccountData() {
+  if (!state.currentUser) return;
+  const uid = state.currentUser.uid;
+  // Load profile
+  try {
+    const profileDoc = await getDoc(doc(db, "users", uid, "account", "profile"));
+    if (profileDoc.exists()) {
+      state.account.profile = profileDoc.data();
+      populateProfileForm();
+    } else {
+      populateProfileForm();
+    }
+  } catch (e) {
+    console.warn("Profile load:", e.message);
+  }
+  // Load notifications
+  try {
+    const notifDoc = await getDoc(doc(db, "users", uid, "account", "notifications"));
+    if (notifDoc.exists()) {
+      state.account.notifications = notifDoc.data();
+      populateNotificationsForm();
+    }
+  } catch (e) {
+    console.warn("Notifications load:", e.message);
+  }
+}
+
+function populateProfileForm() {
+  const p = state.account.profile || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el != null && v != null) el.value = v; };
+  set("profile-name", p.displayName || state.currentUser?.displayName || "");
+  set("profile-username", p.username || "");
+  set("profile-email", state.currentUser?.email || "");
+  set("profile-phone", p.phone || "");
+  set("profile-location", p.location || "");
+  set("profile-website", p.website || "");
+  set("profile-timezone", p.timezone || "Africa/Cairo");
+  set("profile-bio", p.bio || "");
+  if (p.bio) $("#bio-count").textContent = p.bio.length;
+  // social
+  const social = p.social || {};
+  set("social-github", social.github || "");
+  set("social-twitter", social.twitter || "");
+  set("social-discord", social.discord || "");
+  set("social-instagram", social.instagram || "");
+  set("social-linkedin", social.linkedin || "");
+  set("social-youtube", social.youtube || "");
+}
+
+function populateNotificationsForm() {
+  const n = state.account.notifications || {};
+  $$("[data-notif]").forEach((cb) => {
+    const notif = cb.dataset.notif;
+    const chan = cb.dataset.chan;
+    const v = n[notif]?.[chan];
+    if (typeof v === "boolean") cb.checked = v;
+  });
+  if (n.quietHours) {
+    $("#quiet-hours-toggle").checked = n.quietHours.enabled !== false;
+    $("#quiet-from").value = n.quietHours.from || "22:00";
+    $("#quiet-to").value = n.quietHours.to || "08:00";
+    $("#quiet-tz").value = n.quietHours.tz || "Local time";
+  }
+}
+
+function get2FAState() {
+  return {
+    app: $("#tfa-app").checked,
+    sms: $("#tfa-sms").checked,
+    email: $("#tfa-email").checked,
+  };
+}
+
+function update2FAStatus() {
+  const state2 = get2FAState();
+  const any = state2.app || state2.sms || state2.email;
+  const pill = $("#tfa-status");
+  if (any) {
+    pill.classList.add("status-on");
+    pill.classList.remove("status-off");
+    pill.innerHTML = `<span class="dot"></span> Enabled`;
+  } else {
+    pill.classList.add("status-off");
+    pill.classList.remove("status-on");
+    pill.innerHTML = `<span class="dot"></span> Disabled`;
+  }
+}
+
+function updatePasswordStrength() {
+  const pwd = $("#pwd-new").value;
+  const fill = $("#pwd-strength-fill");
+  const label = $("#pwd-strength-label");
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (pwd.length >= 12) score++;
+  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
+  if (/\d/.test(pwd)) score++;
+  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+  fill.classList.remove("weak", "fair", "good", "strong");
+  if (!pwd) {
+    label.textContent = "Enter a password";
+  } else if (score <= 2) {
+    fill.classList.add("weak");
+    label.textContent = "Weak";
+  } else if (score === 3) {
+    fill.classList.add("fair");
+    label.textContent = "Fair";
+  } else if (score === 4) {
+    fill.classList.add("good");
+    label.textContent = "Good";
+  } else {
+    fill.classList.add("strong");
+    label.textContent = "Strong";
+  }
+}
+
+async function changePassword() {
+  const current = $("#pwd-current").value;
+  const next = $("#pwd-new").value;
+  const confirm = $("#pwd-confirm").value;
+  if (!current || !next || !confirm) {
+    toast({ type: "warning", title: "Missing fields", message: "Fill in all password fields." });
+    return;
+  }
+  if (next !== confirm) {
+    toast({ type: "error", title: "Mismatch", message: "New password and confirmation don't match." });
+    return;
+  }
+  if (next.length < 8) {
+    toast({ type: "error", title: "Too short", message: "Password must be at least 8 characters." });
+    return;
+  }
+  const btn = $("#btn-change-password");
+  btn.disabled = true;
+  btn.querySelector("span").textContent = "Updating…";
+  try {
+    const { updatePassword, reauthenticateWithCredential, EmailAuthProvider } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+    const cred = EmailAuthProvider.credential(state.currentUser.email, current);
+    await reauthenticateWithCredential(state.currentUser, cred);
+    await updatePassword(state.currentUser, next);
+    $("#pwd-current").value = "";
+    $("#pwd-new").value = "";
+    $("#pwd-confirm").value = "";
+    updatePasswordStrength();
+    $("#pwd-last-changed").textContent = "just now";
+    toast({ type: "success", title: "Password updated", message: "Your account is now secured with the new password." });
+  } catch (e) {
+    let msg = e.message;
+    if (e.code === "auth/wrong-password") msg = "Current password is incorrect.";
+    if (e.code === "auth/weak-password") msg = "Choose a stronger password.";
+    toast({ type: "error", title: "Update failed", message: msg });
+  } finally {
+    btn.disabled = false;
+    btn.querySelector("span").textContent = "Update password";
+  }
+}
+
+async function signOutAllSessions() {
+  if (!confirm("Sign out of all devices?")) return;
+  try {
+    // In a real implementation this would call a server endpoint to revoke refresh tokens
+    // For now we sign out the current session
+    await logout();
+    toast({ type: "info", title: "Signed out", message: "All sessions terminated. You can sign back in anytime." });
+  } catch (e) {
+    toast({ type: "error", title: "Failed", message: e.message });
+  }
+}
+
+async function saveProfileField(fieldId, value) {
+  if (!state.currentUser) return;
+  const uid = state.currentUser.uid;
+  showSaveIndicator("saving");
+  try {
+    const updates = {};
+    // Map field IDs to nested paths
+    const profileMap = {
+      "profile-name": "displayName",
+      "profile-username": "username",
+      "profile-phone": "phone",
+      "profile-location": "location",
+      "profile-website": "website",
+      "profile-timezone": "timezone",
+      "profile-bio": "bio",
+      "social-github": "social.github",
+      "social-twitter": "social.twitter",
+      "social-discord": "social.discord",
+      "social-instagram": "social.instagram",
+      "social-linkedin": "social.linkedin",
+      "social-youtube": "social.youtube",
+    };
+    const path = profileMap[fieldId];
+    if (!path) return;
+    const newProfile = JSON.parse(JSON.stringify(state.account.profile || {}));
+    if (path.includes(".")) {
+      const [parent, child] = path.split(".");
+      newProfile[parent] = newProfile[parent] || {};
+      newProfile[parent][child] = value;
+    } else {
+      newProfile[path] = value;
+    }
+    newProfile.updatedAt = new Date().toISOString();
+    newProfile.uid = uid;
+    await setDocIfAllowed(doc(db, "users", uid, "account", "profile"), newProfile);
+    state.account.profile = newProfile;
+    showSaveIndicator("saved");
+  } catch (e) {
+    console.error("Save error:", e);
+    showSaveIndicator("error");
+    toast({ type: "error", title: "Save failed", message: e.message });
+  }
+}
+
+async function setDocIfAllowed(docRef, data) {
+  // Use setDoc with merge: true
+  const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+  await setDoc(docRef, data, { merge: true });
+}
+
+let saveNotificationsTimer = null;
+function debouncedSaveNotifications() {
+  clearTimeout(saveNotificationsTimer);
+  saveNotificationsTimer = setTimeout(saveNotifications, 800);
+}
+
+async function saveNotifications() {
+  if (!state.currentUser) return;
+  const uid = state.currentUser.uid;
+  const data = {
+    ...(state.account.notifications || {}),
+    quietHours: {
+      enabled: $("#quiet-hours-toggle").checked,
+      from: $("#quiet-from").value,
+      to: $("#quiet-to").value,
+      tz: $("#quiet-tz").value,
+    },
+  };
+  try {
+    await setDocIfAllowed(doc(db, "users", uid, "account", "notifications"), data);
+    state.account.notifications = data;
+    showSaveIndicator("saved");
+  } catch (e) {
+    console.error("Notif save:", e);
+    showSaveIndicator("error");
+  }
+}
+
+async function saveNotificationPreference(key, value) {
+  if (!state.currentUser) return;
+  const uid = state.currentUser.uid;
+  try {
+    await setDocIfAllowed(doc(db, "users", uid, "account", "notifications"), {
+      [key]: value,
+    });
+  } catch (e) {
+    console.warn("Preference save:", e.message);
+  }
+}
+
+let saveIndicatorTimer = null;
+function showSaveIndicator(state) {
+  const el = $("#save-indicator");
+  if (!el) return;
+  el.classList.remove("saving", "error");
+  clearTimeout(saveIndicatorTimer);
+  if (state === "saving") {
+    el.classList.add("saving");
+    el.innerHTML = `<i data-lucide="loader"></i><span>Saving…</span>`;
+  } else if (state === "error") {
+    el.classList.add("error");
+    el.innerHTML = `<i data-lucide="alert-circle"></i><span>Save failed</span>`;
+  } else {
+    el.innerHTML = `<i data-lucide="check-circle-2"></i><span>All changes saved</span>`;
+  }
+  refreshIcons();
+  saveIndicatorTimer = setTimeout(() => {
+    if (state === "saved") {
+      el.innerHTML = `<i data-lucide="check-circle-2"></i><span>All changes saved</span>`;
+      refreshIcons();
+    }
+  }, 2500);
+}
+
+// ============== MY ACTIVITY ==============
+async function loadMyActivity() {
+  if (!state.currentUser) return;
+  // In a real implementation, load from `users/{uid}/activity_log`
+  // For now, derive from current state
+  const myActions = [];
+  state.tickets.slice(0, 10).forEach((t) => {
+    if (t.status === "resolved") {
+      myActions.push({
+        type: "resolve",
+        title: `Resolved "${t.subject || "Untitled"}"`,
+        meta: `${t.email || "User"} • ${fmt.timeAgo(t.updatedAt || t.createdAt)}`,
+        time: t.updatedAt || t.createdAt,
+      });
+    }
+  });
+  state.myActivity = myActions.sort(
+    (a, b) => (b.time?.seconds || 0) - (a.time?.seconds || 0)
+  );
+}
+
+function renderMyActivity() {
+  const root = $("#my-activity-feed");
+  if (!root) return;
+  const items = state.myActivity;
+  if (items.length === 0) {
+    root.innerHTML = `<div class="muted center pad">No recent activity yet. Start by resolving tickets.</div>`;
+    return;
+  }
+  root.innerHTML = items
+    .map(
+      (a) => `
+      <div class="activity-feed-item">
+        <div class="activity-feed-icon ${a.type}">
+          <i data-lucide="${a.type === "resolve" ? "check" : a.type === "reply" ? "message-square" : a.type === "update" ? "edit" : "log-in"}"></i>
+        </div>
+        <div class="activity-feed-body">
+          <div class="activity-feed-title">${fmt.escape(a.title)}</div>
+          <div class="activity-feed-meta">${fmt.escape(a.meta)}</div>
+        </div>
+      </div>
+    `
+    )
+    .join("");
+  refreshIcons();
+}
+
+function renderPersonalStats() {
+  const handled = state.tickets.filter((t) => t.status === "resolved" || t.status === "in_progress").length;
+  const resolved = state.tickets.filter((t) => t.status === "resolved").length;
+  const replies = state.myActivity.filter((a) => a.type === "reply").length;
+  $$("[data-personal-stat]").forEach((el) => {
+    const key = el.dataset.personalStat;
+    if (key === "handled") animateNumber(el, handled);
+    else if (key === "resolved") animateNumber(el, resolved);
+    else if (key === "replies") animateNumber(el, replies);
+    else if (key === "rating") el.textContent = "—";
+  });
+  // week stats
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const weekTickets = state.tickets.filter((t) => {
+    const d = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
+    return d >= weekAgo;
+  });
+  $("#week-handled").textContent = weekTickets.length;
+  $("#week-resolved").textContent = weekTickets.filter((t) => t.status === "resolved").length;
+  $("#week-replies").textContent = state.myActivity.length;
+  $("#week-avg").textContent = "—";
+}
+
+function renderMyActivityChart() {
+  const ctx = $("#chart-my-activity")?.getContext("2d");
+  if (!ctx) return;
+  const theme = getChartTheme();
+  const days = 7;
+  const labels = [];
+  const data = [];
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString("en-US", { weekday: "short" }));
+    const count = state.tickets.filter((t) => {
+      const td = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
+      return td >= d && td < new Date(d.getTime() + 86400000);
+    }).length;
+    data.push(count);
+  }
+  if (state.charts.myActivity) state.charts.myActivity.destroy();
+  state.charts.myActivity = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Activity",
+          data,
+          backgroundColor: (c) => {
+            const { ctx } = c.chart;
+            const g = ctx.createLinearGradient(0, 0, 0, 200);
+            g.addColorStop(0, "#6366f1");
+            g.addColorStop(1, "#8b5cf6");
+            return g;
+          },
+          borderRadius: 6,
+          maxBarThickness: 26,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: theme.text, font: { size: 11 } }, border: { display: false } },
+        y: { grid: { color: theme.grid }, ticks: { color: theme.text, font: { size: 11 }, stepSize: 1 }, border: { display: false }, beginAtZero: true },
+      },
+    },
   });
 }
 

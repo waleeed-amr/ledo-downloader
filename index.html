@@ -408,6 +408,707 @@
           </div>
         </div>
 
+        <!-- ===== MY ACCOUNT ===== -->
+        <div class="route" data-route="account" hidden>
+          <!-- Profile Hero -->
+          <div class="acct-hero">
+            <div class="acct-cover">
+              <div class="acct-cover-actions">
+                <button class="acct-cover-btn" type="button"><i data-lucide="image"></i> Change cover</button>
+                <button class="acct-cover-btn" type="button"><i data-lucide="share-2"></i> Share</button>
+              </div>
+            </div>
+            <div class="acct-body">
+              <div class="acct-avatar-wrap">
+                <div class="acct-avatar" id="account-avatar">A</div>
+                <button class="avatar-upload-btn" id="avatar-upload-btn" title="Change avatar" type="button">
+                  <i data-lucide="camera"></i>
+                </button>
+              </div>
+              <div class="acct-info">
+                <div class="acct-name-row">
+                  <h2 id="account-display-name">Admin</h2>
+                  <span class="acct-pill verified" id="account-verified">
+                    <i data-lucide="badge-check"></i> Verified
+                  </span>
+                  <span class="acct-pill pro"><i data-lucide="crown"></i> Pro</span>
+                  <span class="acct-pill online"><span class="dot"></span> Online</span>
+                </div>
+                <div class="acct-handle" id="account-email-display">—</div>
+                <div class="acct-meta">
+                  <span class="acct-meta-item"><i data-lucide="shield"></i> Super Admin</span>
+                  <span class="acct-meta-item"><i data-lucide="calendar"></i> Joined <span id="account-joined">—</span></span>
+                  <span class="acct-meta-item"><i data-lucide="globe"></i> <span id="account-location">Earth</span></span>
+                </div>
+              </div>
+              <div class="acct-stats">
+                <div class="acct-stat">
+                  <div class="acct-stat-value" data-personal-stat="handled">0</div>
+                  <div class="acct-stat-label">Handled</div>
+                </div>
+                <div class="acct-stat">
+                  <div class="acct-stat-value" data-personal-stat="resolved">0</div>
+                  <div class="acct-stat-label">Resolved</div>
+                </div>
+                <div class="acct-stat">
+                  <div class="acct-stat-value" data-personal-stat="rating">—</div>
+                  <div class="acct-stat-label">Rating</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabs (horizontal pill row) -->
+          <div class="acct-tabs" role="tablist">
+            <button class="acct-tab active" data-account-tab="profile" role="tab">
+              <i data-lucide="user"></i> Profile
+            </button>
+            <button class="acct-tab" data-account-tab="security" role="tab">
+              <i data-lucide="shield"></i> Security <span class="tab-badge">!</span>
+            </button>
+            <button class="acct-tab" data-account-tab="notifications" role="tab">
+              <i data-lucide="bell"></i> Notifications
+            </button>
+            <button class="acct-tab" data-account-tab="activity" role="tab">
+              <i data-lucide="activity"></i> Activity
+            </button>
+            <button class="acct-tab" data-account-tab="integrations" role="tab">
+              <i data-lucide="plug-2"></i> Integrations
+            </button>
+            <button class="acct-tab danger" data-account-tab="danger" role="tab">
+              <i data-lucide="alert-octagon"></i> Danger Zone
+            </button>
+          </div>
+
+          <!-- Panes -->
+          <div class="account-panes">
+            <!-- ===== PROFILE TAB ===== -->
+            <div class="account-pane active" data-account-pane="profile">
+              <div class="acct-grid">
+                <div class="acct-form-stack">
+                  <!-- Public Profile -->
+                  <div class="acct-form-card">
+                    <div class="acct-form-head">
+                      <div>
+                        <h3>Public Profile</h3>
+                        <p>How others see you across the platform</p>
+                      </div>
+                      <span class="save-indicator" id="save-indicator">
+                        <i data-lucide="check-circle-2"></i> All changes saved
+                      </span>
+                    </div>
+                    <div class="acct-form-body">
+                      <div class="acct-section">
+                        <div class="acct-section-title"><i data-lucide="user"></i> Identity</div>
+                        <div class="acct-row">
+                          <div class="acct-field">
+                            <label>Display name</label>
+                            <div class="acct-input">
+                              <i data-lucide="user"></i>
+                              <input type="text" id="profile-name" placeholder="Your name" />
+                            </div>
+                          </div>
+                          <div class="acct-field">
+                            <label>Username</label>
+                            <div class="acct-input">
+                              <span class="prefix">@</span>
+                              <input type="text" id="profile-username" placeholder="username" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="acct-section">
+                        <div class="acct-section-title"><i data-lucide="contact"></i> Contact</div>
+                        <div class="acct-row">
+                          <div class="acct-field full">
+                            <label>Email</label>
+                            <div class="acct-input readonly">
+                              <i data-lucide="mail"></i>
+                              <input type="email" id="profile-email" readonly />
+                              <span class="verified-pill" id="email-verified-pill">
+                                <i data-lucide="check"></i> Verified
+                              </span>
+                            </div>
+                          </div>
+                          <div class="acct-field full">
+                            <label>Phone</label>
+                            <div class="acct-input">
+                              <i data-lucide="phone"></i>
+                              <input type="tel" id="profile-phone" placeholder="+20 100 000 0000" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="acct-section">
+                        <div class="acct-section-title"><i data-lucide="map"></i> Location & Web</div>
+                        <div class="acct-row">
+                          <div class="acct-field">
+                            <label>Location</label>
+                            <div class="acct-input">
+                              <i data-lucide="map-pin"></i>
+                              <input type="text" id="profile-location" placeholder="City, Country" />
+                            </div>
+                          </div>
+                          <div class="acct-field">
+                            <label>Website</label>
+                            <div class="acct-input">
+                              <i data-lucide="link"></i>
+                              <input type="url" id="profile-website" placeholder="https://yoursite.com" />
+                            </div>
+                          </div>
+                        </div>
+                        <div class="acct-row" style="margin-top:12px">
+                          <div class="acct-field full">
+                            <label>Timezone</label>
+                            <div class="acct-input">
+                              <i data-lucide="clock"></i>
+                              <select id="profile-timezone">
+                                <option value="Africa/Cairo">Africa/Cairo (GMT+2)</option>
+                                <option value="Europe/London">Europe/London (GMT+0)</option>
+                                <option value="America/New_York">America/New_York (GMT-5)</option>
+                                <option value="America/Los_Angeles">America/Los_Angeles (GMT-8)</option>
+                                <option value="Asia/Dubai">Asia/Dubai (GMT+4)</option>
+                                <option value="Asia/Riyadh">Asia/Riyadh (GMT+3)</option>
+                                <option value="Asia/Tokyo">Asia/Tokyo (GMT+9)</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="acct-section">
+                        <div class="acct-section-title"><i data-lucide="align-left"></i> About you</div>
+                        <div class="acct-field full">
+                          <div class="acct-input" style="align-items:flex-start">
+                            <i data-lucide="message-square" style="margin-top:2px"></i>
+                            <textarea id="profile-bio" rows="3" placeholder="Tell us a bit about yourself…" maxlength="280"></textarea>
+                          </div>
+                          <div class="acct-hint"><span id="bio-count">0</span>/280</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right sidebar: live preview + social -->
+                <div class="acct-side">
+                  <div class="acct-preview">
+                    <div class="acct-preview-cover"></div>
+                    <div class="acct-preview-avatar" id="acct-preview-avatar">A</div>
+                    <div class="acct-preview-name" id="acct-preview-name">Admin</div>
+                    <div class="acct-preview-handle" id="acct-preview-handle">@admin</div>
+                    <div class="acct-preview-bio" id="acct-preview-bio">Tell others a bit about yourself…</div>
+                    <div class="acct-preview-stats">
+                      <div class="acct-preview-stat"><div class="acct-preview-stat-n" id="acct-preview-handled">0</div><div class="acct-preview-stat-l">Handled</div></div>
+                      <div class="acct-preview-stat"><div class="acct-preview-stat-n" id="acct-preview-resolved">0</div><div class="acct-preview-stat-l">Resolved</div></div>
+                      <div class="acct-preview-stat"><div class="acct-preview-stat-n" id="acct-preview-rating">—</div><div class="acct-preview-stat-l">Rating</div></div>
+                    </div>
+                    <div class="acct-completeness">
+                      <div class="acct-completeness-head">
+                        <span class="acct-completeness-label">Profile completeness</span>
+                        <span class="acct-completeness-value" id="acct-completeness-value">0%</span>
+                      </div>
+                      <div class="acct-progress"><div class="acct-progress-fill" id="acct-progress-fill"></div></div>
+                    </div>
+                    <button class="acct-btn" type="button" style="width:100%;justify-content:center">
+                      <i data-lucide="external-link"></i> View public profile
+                    </button>
+                  </div>
+
+                  <div class="acct-form-card">
+                    <div class="acct-form-head" style="background:transparent;padding:18px 20px">
+                      <div>
+                        <h3 style="font-size:14px">Social Links</h3>
+                        <p>Connect your accounts</p>
+                      </div>
+                    </div>
+                    <div class="acct-form-body" style="padding:16px 20px">
+                      <div class="acct-social-grid">
+                        <div class="acct-social">
+                          <div class="ic" style="background:linear-gradient(135deg,#333,#000)"><i data-lucide="github"></i></div>
+                          <input type="text" id="social-github" placeholder="github.com/username" />
+                        </div>
+                        <div class="acct-social">
+                          <div class="ic" style="background:linear-gradient(135deg,#1da1f2,#0d8ddc)"><i data-lucide="twitter"></i></div>
+                          <input type="text" id="social-twitter" placeholder="@handle" />
+                        </div>
+                        <div class="acct-social">
+                          <div class="ic" style="background:linear-gradient(135deg,#5865f2,#404eed)"><i data-lucide="message-circle"></i></div>
+                          <input type="text" id="social-discord" placeholder="username#0000" />
+                        </div>
+                        <div class="acct-social">
+                          <div class="ic" style="background:linear-gradient(135deg,#e4405f,#fcaf45)"><i data-lucide="instagram"></i></div>
+                          <input type="text" id="social-instagram" placeholder="@handle" />
+                        </div>
+                        <div class="acct-social">
+                          <div class="ic" style="background:linear-gradient(135deg,#0a66c2,#004182)"><i data-lucide="linkedin"></i></div>
+                          <input type="text" id="social-linkedin" placeholder="in/username" />
+                        </div>
+                        <div class="acct-social">
+                          <div class="ic" style="background:linear-gradient(135deg,#ff0000,#cc0000)"><i data-lucide="youtube"></i></div>
+                          <input type="text" id="social-youtube" placeholder="@channel" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+              <!-- ===== SECURITY TAB ===== -->
+              <div class="account-pane" data-account-pane="security" hidden>
+                <!-- Password -->
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>Password</h3>
+                      <div class="card-sub">Last changed <span id="pwd-last-changed">never</span></div>
+                    </div>
+                  </div>
+                  <div class="form-grid">
+                    <div class="form-field full">
+                      <label>Current password</label>
+                      <div class="input-wrap">
+                        <i data-lucide="lock"></i>
+                        <input type="password" id="pwd-current" placeholder="Enter current password" />
+                        <button type="button" class="suffix-btn" data-toggle-pwd="pwd-current">
+                          <i data-lucide="eye"></i>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="form-field">
+                      <label>New password</label>
+                      <div class="input-wrap">
+                        <i data-lucide="key"></i>
+                        <input type="password" id="pwd-new" placeholder="Choose a strong password" />
+                        <button type="button" class="suffix-btn" data-toggle-pwd="pwd-new">
+                          <i data-lucide="eye"></i>
+                        </button>
+                      </div>
+                      <div class="pwd-strength" id="pwd-strength">
+                        <div class="pwd-strength-bar"><div class="pwd-strength-fill" id="pwd-strength-fill"></div></div>
+                        <div class="pwd-strength-label" id="pwd-strength-label">Enter a password</div>
+                      </div>
+                    </div>
+                    <div class="form-field">
+                      <label>Confirm new password</label>
+                      <div class="input-wrap">
+                        <i data-lucide="key"></i>
+                        <input type="password" id="pwd-confirm" placeholder="Repeat new password" />
+                        <button type="button" class="suffix-btn" data-toggle-pwd="pwd-confirm">
+                          <i data-lucide="eye"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-actions">
+                    <button class="btn-primary" id="btn-change-password">
+                      <i data-lucide="shield-check"></i><span>Update password</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 2FA -->
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>Two-Factor Authentication</h3>
+                      <div class="card-sub">Add an extra layer of security to your account</div>
+                    </div>
+                    <span class="status-pill sm status-off" id="tfa-status">
+                      <span class="dot"></span> Disabled
+                    </span>
+                  </div>
+                  <div class="tfa-options">
+                    <div class="tfa-option">
+                      <div class="tfa-icon"><i data-lucide="smartphone"></i></div>
+                      <div class="tfa-info">
+                        <div class="tfa-name">Authenticator App</div>
+                        <div class="tfa-desc">Use Google Authenticator, Authy, or 1Password</div>
+                      </div>
+                      <label class="switch">
+                        <input type="checkbox" id="tfa-app">
+                        <span class="switch-slider"></span>
+                      </label>
+                    </div>
+                    <div class="tfa-option">
+                      <div class="tfa-icon"><i data-lucide="message-square"></i></div>
+                      <div class="tfa-info">
+                        <div class="tfa-name">SMS Verification</div>
+                        <div class="tfa-desc">Receive codes via text message</div>
+                      </div>
+                      <label class="switch">
+                        <input type="checkbox" id="tfa-sms">
+                        <span class="switch-slider"></span>
+                      </label>
+                    </div>
+                    <div class="tfa-option">
+                      <div class="tfa-icon"><i data-lucide="mail"></i></div>
+                      <div class="tfa-info">
+                        <div class="tfa-name">Email Verification</div>
+                        <div class="tfa-desc">Receive codes via email</div>
+                      </div>
+                      <label class="switch">
+                        <input type="checkbox" id="tfa-email" checked>
+                        <span class="switch-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Active Sessions -->
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>Active Sessions</h3>
+                      <div class="card-sub">Devices currently logged in to your account</div>
+                    </div>
+                    <button class="btn-danger sm" id="btn-signout-all">
+                      <i data-lucide="log-out"></i><span>Sign out all</span>
+                    </button>
+                  </div>
+                  <div class="sessions-list" id="sessions-list">
+                    <div class="session-item current">
+                      <div class="session-icon"><i data-lucide="monitor"></i></div>
+                      <div class="session-info">
+                        <div class="session-name">This device</div>
+                        <div class="session-meta">
+                          <span><i data-lucide="globe"></i> <span id="sess-browser">—</span></span>
+                          <span><i data-lucide="map-pin"></i> <span id="sess-location">—</span></span>
+                          <span class="session-current">● Active now</span>
+                        </div>
+                      </div>
+                      <span class="session-pill">Current</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- API Tokens -->
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>API Tokens</h3>
+                      <div class="card-sub">Personal access tokens for the Ledo API</div>
+                    </div>
+                    <button class="btn-ghost" id="btn-new-token">
+                      <i data-lucide="plus"></i> Generate new
+                    </button>
+                  </div>
+                  <div class="tokens-list" id="tokens-list">
+                    <div class="token-item">
+                      <div class="token-icon"><i data-lucide="key"></i></div>
+                      <div class="token-info">
+                        <div class="token-name">Dashboard CLI</div>
+                        <div class="token-meta">
+                          <span class="token-mono">ledo_pat_************************a8f2</span>
+                          <span>Created 12 days ago</span>
+                          <span>Last used 2h ago</span>
+                        </div>
+                      </div>
+                      <button class="row-btn" title="Revoke">
+                        <i data-lucide="trash-2"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== NOTIFICATIONS TAB ===== -->
+              <div class="account-pane" data-account-pane="notifications" hidden>
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>Channels</h3>
+                      <div class="card-sub">Where you want to be notified</div>
+                    </div>
+                  </div>
+                  <div class="notif-matrix">
+                    <div class="notif-matrix-head">
+                      <div></div>
+                      <div class="matrix-col">Email</div>
+                      <div class="matrix-col">In-app</div>
+                      <div class="matrix-col">Push</div>
+                    </div>
+                    <div class="notif-row">
+                      <div class="notif-row-label">New tickets</div>
+                      <label class="check"><input type="checkbox" data-notif="newTicket" data-chan="email" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="newTicket" data-chan="inapp" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="newTicket" data-chan="push" checked><span class="check-box"></span></label>
+                    </div>
+                    <div class="notif-row">
+                      <div class="notif-row-label">Replies & mentions</div>
+                      <label class="check"><input type="checkbox" data-notif="reply" data-chan="email" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="reply" data-chan="inapp" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="reply" data-chan="push"><span class="check-box"></span></label>
+                    </div>
+                    <div class="notif-row">
+                      <div class="notif-row-label">Crash reports</div>
+                      <label class="check"><input type="checkbox" data-notif="crash" data-chan="email" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="crash" data-chan="inapp" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="crash" data-chan="push" checked><span class="check-box"></span></label>
+                    </div>
+                    <div class="notif-row">
+                      <div class="notif-row-label">Weekly digest</div>
+                      <label class="check"><input type="checkbox" data-notif="digest" data-chan="email" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="digest" data-chan="inapp"><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="digest" data-chan="push"><span class="check-box"></span></label>
+                    </div>
+                    <div class="notif-row">
+                      <div class="notif-row-label">Product updates</div>
+                      <label class="check"><input type="checkbox" data-notif="product" data-chan="email"><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="product" data-chan="inapp" checked><span class="check-box"></span></label>
+                      <label class="check"><input type="checkbox" data-notif="product" data-chan="push"><span class="check-box"></span></label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>Quiet Hours</h3>
+                      <div class="card-sub">Pause non-urgent notifications during these hours</div>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="quiet-hours-toggle" checked>
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
+                  <div class="quiet-hours">
+                    <div class="time-input">
+                      <label>From</label>
+                      <input type="time" id="quiet-from" value="22:00" />
+                    </div>
+                    <div class="time-arrow"><i data-lucide="arrow-right"></i></div>
+                    <div class="time-input">
+                      <label>To</label>
+                      <input type="time" id="quiet-to" value="08:00" />
+                    </div>
+                    <div class="time-input">
+                      <label>Timezone</label>
+                      <select id="quiet-tz">
+                        <option>Local time</option>
+                        <option>UTC</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== ACTIVITY TAB ===== -->
+              <div class="account-pane" data-account-pane="activity" hidden>
+                <div class="grid-2">
+                  <div class="card">
+                    <div class="card-head">
+                      <h3>This week</h3>
+                    </div>
+                    <div class="mini-stats">
+                      <div class="mini-stat">
+                        <div class="mini-stat-icon" style="background:var(--gradient)"><i data-lucide="ticket"></i></div>
+                        <div>
+                          <div class="mini-stat-value" id="week-handled">0</div>
+                          <div class="mini-stat-label">Tickets handled</div>
+                        </div>
+                      </div>
+                      <div class="mini-stat">
+                        <div class="mini-stat-icon" style="background:linear-gradient(135deg,#10b981,#059669)"><i data-lucide="check"></i></div>
+                        <div>
+                          <div class="mini-stat-value" id="week-resolved">0</div>
+                          <div class="mini-stat-label">Resolved</div>
+                        </div>
+                      </div>
+                      <div class="mini-stat">
+                        <div class="mini-stat-icon" style="background:linear-gradient(135deg,#06b6d4,#6366f1)"><i data-lucide="message-square"></i></div>
+                        <div>
+                          <div class="mini-stat-value" id="week-replies">0</div>
+                          <div class="mini-stat-label">Replies sent</div>
+                        </div>
+                      </div>
+                      <div class="mini-stat">
+                        <div class="mini-stat-icon" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"><i data-lucide="zap"></i></div>
+                        <div>
+                          <div class="mini-stat-value" id="week-avg">—</div>
+                          <div class="mini-stat-label">Avg. response</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card">
+                    <div class="card-head">
+                      <h3>Activity</h3>
+                    </div>
+                    <div class="chart-wrap" style="min-height:200px">
+                      <canvas id="chart-my-activity"></canvas>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>Recent Actions</h3>
+                      <div class="card-sub">Your latest activity on the dashboard</div>
+                    </div>
+                  </div>
+                  <div class="activity-feed" id="my-activity-feed">
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                    <div class="skeleton-row"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== INTEGRATIONS TAB ===== -->
+              <div class="account-pane" data-account-pane="integrations" hidden>
+                <div class="card">
+                  <div class="card-head">
+                    <div>
+                      <h3>Connected Apps</h3>
+                      <div class="card-sub">Supercharge your workflow with third-party tools</div>
+                    </div>
+                  </div>
+                  <div class="integrations-grid">
+                    <div class="integration-card" data-integration="slack">
+                      <div class="integration-head">
+                        <div class="integration-icon" style="background:linear-gradient(135deg,#4a154b,#ecb22e)">
+                          <i data-lucide="message-circle"></i>
+                        </div>
+                        <label class="switch">
+                          <input type="checkbox" data-integration-toggle="slack">
+                          <span class="switch-slider"></span>
+                        </label>
+                      </div>
+                      <div class="integration-name">Slack</div>
+                      <div class="integration-desc">Get notified in your Slack channels when new tickets arrive.</div>
+                      <div class="integration-status">Not connected</div>
+                    </div>
+                    <div class="integration-card" data-integration="discord">
+                      <div class="integration-head">
+                        <div class="integration-icon" style="background:linear-gradient(135deg,#5865f2,#404eed)">
+                          <i data-lucide="hash"></i>
+                        </div>
+                        <label class="switch">
+                          <input type="checkbox" data-integration-toggle="discord">
+                          <span class="switch-slider"></span>
+                        </label>
+                      </div>
+                      <div class="integration-name">Discord</div>
+                      <div class="integration-desc">Forward ticket updates to your Discord server via webhook.</div>
+                      <div class="integration-status">Not connected</div>
+                    </div>
+                    <div class="integration-card" data-integration="github">
+                      <div class="integration-head">
+                        <div class="integration-icon" style="background:linear-gradient(135deg,#333,#000)">
+                          <i data-lucide="github"></i>
+                        </div>
+                        <label class="switch">
+                          <input type="checkbox" data-integration-toggle="github">
+                          <span class="switch-slider"></span>
+                        </label>
+                      </div>
+                      <div class="integration-name">GitHub</div>
+                      <div class="integration-desc">Link crash reports to GitHub issues automatically.</div>
+                      <div class="integration-status">Not connected</div>
+                    </div>
+                    <div class="integration-card" data-integration="zapier">
+                      <div class="integration-head">
+                        <div class="integration-icon" style="background:linear-gradient(135deg,#ff4a00,#fc6a00)">
+                          <i data-lucide="zap"></i>
+                        </div>
+                        <label class="switch">
+                          <input type="checkbox" data-integration-toggle="zapier">
+                          <span class="switch-slider"></span>
+                        </label>
+                      </div>
+                      <div class="integration-name">Zapier</div>
+                      <div class="integration-desc">Connect to 5,000+ apps without writing a line of code.</div>
+                      <div class="integration-status">Not connected</div>
+                    </div>
+                    <div class="integration-card" data-integration="webhook">
+                      <div class="integration-head">
+                        <div class="integration-icon" style="background:var(--gradient)">
+                          <i data-lucide="webhook"></i>
+                        </div>
+                        <label class="switch">
+                          <input type="checkbox" data-integration-toggle="webhook">
+                          <span class="switch-slider"></span>
+                        </label>
+                      </div>
+                      <div class="integration-name">Custom Webhook</div>
+                      <div class="integration-desc">POST events to any URL you control.</div>
+                      <div class="integration-status">Not connected</div>
+                    </div>
+                    <div class="integration-card" data-integration="telegram">
+                      <div class="integration-head">
+                        <div class="integration-icon" style="background:linear-gradient(135deg,#229ed9,#0088cc)">
+                          <i data-lucide="send"></i>
+                        </div>
+                        <label class="switch">
+                          <input type="checkbox" data-integration-toggle="telegram">
+                          <span class="switch-slider"></span>
+                        </label>
+                      </div>
+                      <div class="integration-name">Telegram</div>
+                      <div class="integration-desc">Get instant push notifications in Telegram.</div>
+                      <div class="integration-status">Not connected</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== DANGER ZONE ===== -->
+              <div class="account-pane" data-account-pane="danger" hidden>
+                <div class="card danger-zone">
+                  <div class="card-head">
+                    <div>
+                      <h3>Sign out everywhere</h3>
+                      <div class="card-sub">End all active sessions on every device</div>
+                    </div>
+                  </div>
+                  <p class="muted">This will sign you out of all devices except this one. You'll need to sign in again on each device.</p>
+                  <button class="btn-danger" id="btn-danger-signout-all">
+                    <i data-lucide="log-out"></i><span>Sign out of all devices</span>
+                  </button>
+                </div>
+
+                <div class="card danger-zone">
+                  <div class="card-head">
+                    <div>
+                      <h3>Reset dashboard preferences</h3>
+                      <div class="card-sub">Clear all local preferences, theme, compact mode, etc.</div>
+                    </div>
+                  </div>
+                  <p class="muted">Your account data will not be affected. This only resets your local UI preferences.</p>
+                  <button class="btn-danger" id="btn-danger-reset">
+                    <i data-lucide="refresh-ccw"></i><span>Reset preferences</span>
+                  </button>
+                </div>
+
+                <div class="card danger-zone critical">
+                  <div class="card-head">
+                    <div>
+                      <h3>Delete account</h3>
+                      <div class="card-sub">Permanently remove your admin account and all data</div>
+                    </div>
+                    <span class="critical-badge">
+                      <i data-lucide="alert-triangle"></i> Irreversible
+                    </span>
+                  </div>
+                  <p class="muted">This action cannot be undone. All your data, preferences, and access will be permanently removed.</p>
+                  <div class="form-field">
+                    <label>Type <strong>DELETE</strong> to confirm</label>
+                    <input type="text" id="delete-confirm" placeholder="DELETE" />
+                  </div>
+                  <button class="btn-critical" id="btn-danger-delete" disabled>
+                    <i data-lucide="trash-2"></i><span>Delete my account forever</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- ===== SETTINGS ===== -->
         <div class="route" data-route="settings" hidden>
           <div class="card">

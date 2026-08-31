@@ -963,6 +963,8 @@ function renderAllCharts() {
   renderDailyChart();
 }
 
+let chatUnsub = null;
+
 // ============== TICKET MODAL ==============
 function openTicketModal(ticket, focusReply = false) {
   state.selectedTicket = ticket;
@@ -970,9 +972,43 @@ function openTicketModal(ticket, focusReply = false) {
   $("#modal-email").textContent = ticket.email || "—";
   $("#modal-time").textContent = fmt.date(ticket.createdAt);
   $("#modal-userid").textContent = ticket.userId || "guest";
-  $("#modal-message").textContent = ticket.message || "—";
   $("#reply-target").textContent = ticket.email || "user";
   $("#modal-reply").value = "";
+
+  const chatContainer = $("#modal-chat-history");
+  chatContainer.innerHTML = `<div class="muted center pad" style="flex:1;display:flex;align-items:center;justify-content:center;">Loading conversation...</div>`;
+
+  if (chatUnsub) {
+    chatUnsub();
+    chatUnsub = null;
+  }
+
+  const userId = ticket.userId || ticket.id;
+  chatUnsub = onSnapshot(
+    query(collection(db, `chats/${userId}/messages`), orderBy("createdAt", "asc")),
+    (snapshot) => {
+      if (snapshot.empty) {
+        chatContainer.innerHTML = `<div class="muted center pad" style="flex:1;display:flex;align-items:center;justify-content:center;">No messages found.</div>`;
+        return;
+      }
+      chatContainer.innerHTML = snapshot.docs.map(doc => {
+        const msg = doc.data();
+        const type = msg.isAdmin ? "admin" : "user";
+        const time = fmt.timeAgo(msg.createdAt);
+        return `
+          <div class="chat-msg ${type}">
+            <div>${fmt.escape(msg.text || "")}</div>
+            <div class="chat-msg-time">${time}</div>
+          </div>
+        `;
+      }).join("");
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    },
+    (err) => {
+      console.error("Chat fetch error", err);
+      chatContainer.innerHTML = `<div class="muted center pad" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--error);">Failed to load chat history.</div>`;
+    }
+  );
 
   // Status pill
   const status = ticket.status || "open";
@@ -995,6 +1031,10 @@ function openTicketModal(ticket, focusReply = false) {
 }
 
 function closeTicketModal() {
+  if (chatUnsub) {
+    chatUnsub();
+    chatUnsub = null;
+  }
   $("#ticket-modal").hidden = true;
   state.selectedTicket = null;
 }

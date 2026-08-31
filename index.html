@@ -32,22 +32,38 @@
         </header>
 
         <div class="card">
-            <h3 style="margin-top: 0; margin-bottom: 20px; font-weight: 500;">Recent Crash Reports</h3>
+            <h3 style="margin-top: 0; margin-bottom: 20px; font-weight: 500;">User Support Tickets</h3>
             <div class="table-responsive">
                 <table id="crash-table">
                     <thead>
                         <tr>
                             <th>Time</th>
-                            <th>Category</th>
-                            <th>Domain</th>
+                            <th>User Email</th>
+                            <th>Subject</th>
                             <th>Message</th>
                             <th>Status</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="crash-tbody">
-                        <tr><td colspan="5" style="text-align: center; padding: 30px;">Loading reports...</td></tr>
+                        <tr><td colspan="6" style="text-align: center; padding: 30px;">Loading tickets...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message Modal -->
+    <div id="message-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content card" style="max-width: 500px; width: 100%;">
+            <h3 style="margin-top: 0; margin-bottom: 15px;">Send Message to User</h3>
+            <div style="margin-bottom: 15px; color: #a1a1aa; font-size: 14px;">
+                Replying to ticket: <strong id="modal-ticket-subject" style="color: #fff;"></strong>
+            </div>
+            <textarea id="modal-message-text" placeholder="Write your reply here..." class="modern-input" style="width: 100%; height: 120px; padding: 12px; border-radius: 8px; margin-bottom: 15px; resize: vertical;"></textarea>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="btn-modal-cancel" class="btn btn-outline" style="padding: 8px 16px;">Cancel</button>
+                <button id="btn-modal-send" class="btn" style="padding: 8px 16px;">Send Message</button>
             </div>
         </div>
     </div>

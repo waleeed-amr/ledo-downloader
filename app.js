@@ -68,15 +68,15 @@ btnLogout.addEventListener('click', async () => {
 });
 
 function loadReports() {
-    crashTbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Loading...</td></tr>';
+    crashTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Loading...</td></tr>';
     
-    const q = query(collection(db, "crash_reports"), orderBy("timestamp", "desc"), limit(50));
+    const q = query(collection(db, "support_tickets"), orderBy("createdAt", "desc"), limit(50));
     
     unsubscribeReports = onSnapshot(q, (snapshot) => {
         crashTbody.innerHTML = '';
         
         if (snapshot.empty) {
-            crashTbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No reports found.</td></tr>';
+            crashTbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No tickets found.</td></tr>';
             return;
         }
         
@@ -86,35 +86,87 @@ function loadReports() {
             const tr = document.createElement('tr');
             
             const tdTime = document.createElement('td');
-            tdTime.innerText = new Date(data.timestamp).toLocaleString();
+            tdTime.innerText = new Date(data.createdAt).toLocaleString();
             
-            const tdCat = document.createElement('td');
-            tdCat.innerHTML = `<span class="badge">${data.error_category || 'Unknown'}</span>`;
+            const tdEmail = document.createElement('td');
+            tdEmail.innerHTML = `<span class="badge">${data.email || 'Unknown'}</span>`;
             
-            const tdDom = document.createElement('td');
-            tdDom.innerText = data.target_domain || 'N/A';
+            const tdSub = document.createElement('td');
+            tdSub.innerText = data.subject || 'N/A';
             
             const tdMsg = document.createElement('td');
-            tdMsg.innerText = data.error_message || 'N/A';
-            tdMsg.style.maxWidth = "300px";
+            tdMsg.innerText = data.message || 'N/A';
+            tdMsg.style.maxWidth = "250px";
             tdMsg.style.overflow = "hidden";
             tdMsg.style.textOverflow = "ellipsis";
             tdMsg.style.whiteSpace = "nowrap";
-            tdMsg.title = data.error_message;
+            tdMsg.title = data.message;
             
             const tdStatus = document.createElement('td');
-            tdStatus.innerText = data.status || 'new';
+            tdStatus.innerText = data.status || 'open';
             
+            const tdAction = document.createElement('td');
+            const replyBtn = document.createElement('button');
+            replyBtn.className = 'btn btn-sm';
+            replyBtn.innerText = 'Reply';
+            replyBtn.onclick = () => openMessageModal(data.userId, data.subject);
+            tdAction.appendChild(replyBtn);
+
             tr.appendChild(tdTime);
-            tr.appendChild(tdCat);
-            tr.appendChild(tdDom);
+            tr.appendChild(tdEmail);
+            tr.appendChild(tdSub);
             tr.appendChild(tdMsg);
             tr.appendChild(tdStatus);
+            tr.appendChild(tdAction);
             
             crashTbody.appendChild(tr);
         });
     }, (error) => {
         console.error(error);
-        crashTbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: red;">Error loading reports (Check permissions)</td></tr>';
+        crashTbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Error loading tickets (Check permissions)</td></tr>';
     });
 }
+
+// Modal Logic
+let currentReplyUserId = null;
+const modal = document.getElementById('message-modal');
+const modalSubject = document.getElementById('modal-ticket-subject');
+const modalMsgText = document.getElementById('modal-message-text');
+
+function openMessageModal(userId, subject) {
+    if (!userId) {
+        alert("Cannot reply: User ID is missing (Guest user?).");
+        return;
+    }
+    currentReplyUserId = userId;
+    modalSubject.innerText = subject;
+    modalMsgText.value = "";
+    modal.style.display = "flex";
+}
+
+document.getElementById('btn-modal-cancel').addEventListener('click', () => {
+    modal.style.display = "none";
+});
+
+document.getElementById('btn-modal-send').addEventListener('click', async () => {
+    const text = modalMsgText.value.trim();
+    if (!text || !currentReplyUserId) return;
+    
+    document.getElementById('btn-modal-send').innerText = "Sending...";
+    document.getElementById('btn-modal-send').disabled = true;
+    
+    try {
+        const { addDoc } = await import("https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js");
+        await addDoc(collection(db, `users/${currentReplyUserId}/messages`), {
+            text: text,
+            createdAt: new Date().toISOString()
+        });
+        modal.style.display = "none";
+    } catch (e) {
+        console.error("Error sending message", e);
+        alert("Failed to send message.");
+    }
+    
+    document.getElementById('btn-modal-send').innerText = "Send Message";
+    document.getElementById('btn-modal-send').disabled = false;
+});

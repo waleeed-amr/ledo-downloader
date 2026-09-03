@@ -649,7 +649,7 @@ function renderCrashes() {
         <td><div class="row-time">${fmt.timeAgo(c.createdAt)}</div></td>
         <td><div class="row-email">${fmt.escape(c.email || "—")}</div></td>
         <td><div class="row-subject">${fmt.escape(c.subject || "—")}</div></td>
-        <td><div class="row-msg" style="max-width:340px">${fmt.escape(c.message || "—")}</div></td>
+        <td><div class="row-msg" style="max-width:340px; cursor:pointer; transition: all 0.2s;" title="Click to expand/collapse" onclick="if(this.style.whiteSpace==='pre-wrap'){this.style.whiteSpace='nowrap';this.style.maxWidth='340px'}else{this.style.whiteSpace='pre-wrap';this.style.maxWidth='none'}">${fmt.escape(c.message || "—")}</div></td>
       </tr>
     `
     )

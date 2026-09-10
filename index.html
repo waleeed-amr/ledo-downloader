@@ -116,6 +116,14 @@
             <i data-lucide="bug"></i>
             <span class="nav-text">Crash Reports</span>
           </a>
+          <a href="#announcements" class="nav-item" data-route="announcements">
+            <i data-lucide="megaphone"></i>
+            <span class="nav-text">Announcements</span>
+          </a>
+          <a href="#updates" class="nav-item" data-route="updates">
+            <i data-lucide="rocket"></i>
+            <span class="nav-text">App Releases</span>
+          </a>
         </div>
         <div class="nav-section">
           <div class="nav-label">Insights</div>
@@ -356,6 +364,134 @@
                   <tr><td colspan="4" class="empty">Loading crash reports…</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== ANNOUNCEMENTS ===== -->
+        <div class="route" data-route="announcements" hidden>
+          <div class="grid-2" style="grid-template-columns: 1fr 1.2fr; gap: 24px; align-items: flex-start;">
+            <!-- Create Announcement Card -->
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h3 style="display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="megaphone" style="color:var(--accent,#3b82f6)"></i> Send New Announcement
+                  </h3>
+                  <div class="card-sub">Shows as a popup to all desktop users when opening the app</div>
+                </div>
+              </div>
+              <form id="ann-form" style="display:flex;flex-direction:column;gap:16px;margin-top:16px;">
+                <div class="form-group">
+                  <label for="ann-title">Title / Headline</label>
+                  <input type="text" id="ann-title" class="input" placeholder="e.g. مرحباً بكم في الإصدار الجديد!" required />
+                </div>
+                <div class="form-group">
+                  <label for="ann-body">Message Body</label>
+                  <textarea id="ann-body" class="input" rows="4" placeholder="Enter message text for users..." required style="resize:vertical;"></textarea>
+                </div>
+                <div class="grid-2" style="gap:12px;">
+                  <div class="form-group">
+                    <label for="ann-type">Type</label>
+                    <select id="ann-type" class="input">
+                      <option value="info">Information (إشعار)</option>
+                      <option value="warning">Warning (تنبيه)</option>
+                      <option value="update">Update Notice (تحديث)</option>
+                      <option value="alert">Urgent Alert (عاجل)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="ann-priority">Priority</label>
+                    <select id="ann-priority" class="input">
+                      <option value="normal">Normal</option>
+                      <option value="high">High (Shows First)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid-2" style="gap:12px;">
+                  <div class="form-group">
+                    <label for="ann-action-url">Action URL (Optional)</label>
+                    <input type="url" id="ann-action-url" class="input" placeholder="https://..." />
+                  </div>
+                  <div class="form-group">
+                    <label for="ann-action-label">Button Label</label>
+                    <input type="text" id="ann-action-label" class="input" placeholder="e.g. عرض التفاصيل" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="ann-min-version">Min App Version (Optional)</label>
+                  <input type="text" id="ann-min-version" class="input" placeholder="e.g. 3.9.0" />
+                </div>
+                <button type="submit" class="btn btn-primary" style="margin-top:8px;">
+                  <i data-lucide="send"></i> Publish Announcement
+                </button>
+              </form>
+            </div>
+
+            <!-- Active Announcements List -->
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Active Announcements</h3>
+                  <div class="card-sub">Currently active messages delivered to desktop apps</div>
+                </div>
+              </div>
+              <div id="announcements-list" style="display:flex;flex-direction:column;gap:12px;margin-top:16px;">
+                <div class="empty">Loading announcements…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== APP RELEASES & MEDIAFIRE UPDATES ===== -->
+        <div class="route" data-route="updates" hidden>
+          <div class="grid-2" style="grid-template-columns: 1fr 1fr; gap: 24px; align-items: flex-start;">
+            <!-- Publish Update Card -->
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h3 style="display:flex;align-items:center;gap:8px;">
+                    <i data-lucide="rocket" style="color:#10b981"></i> Release New Version
+                  </h3>
+                  <div class="card-sub">Publish a new installer link (MediaFire, Google Drive, Direct)</div>
+                </div>
+              </div>
+              <form id="update-form" style="display:flex;flex-direction:column;gap:16px;margin-top:16px;">
+                <div class="form-group">
+                  <label for="update-version">Version Number</label>
+                  <input type="text" id="update-version" class="input" placeholder="e.g. 4.0.0" required />
+                </div>
+                <div class="form-group">
+                  <label for="update-download-url">MediaFire Download Link</label>
+                  <input type="url" id="update-download-url" class="input" placeholder="https://www.mediafire.com/file/..." required />
+                </div>
+                <div class="form-group">
+                  <label for="update-changelog-input">Changelog / What's New</label>
+                  <textarea id="update-changelog-input" class="input" rows="5" placeholder="- مميزات جديدة&#10;- إصلاح أخطاء التحميل&#10;- تحسين الأداء" style="resize:vertical;"></textarea>
+                </div>
+                <div class="form-check" style="display:flex;align-items:center;gap:10px;padding:8px 0;">
+                  <input type="checkbox" id="update-required" style="width:18px;height:18px;cursor:pointer;" />
+                  <label for="update-required" style="cursor:pointer;font-weight:600;">
+                    Force Update (إلزام المستخدمين بالتحديث)
+                  </label>
+                </div>
+                <button type="submit" class="btn btn-primary" style="background:#10b981;border-color:#059669;margin-top:8px;">
+                  <i data-lucide="upload-cloud"></i> Save & Publish Update
+                </button>
+              </form>
+            </div>
+
+            <!-- Current Release Live Preview -->
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h3>Current Live Release</h3>
+                  <div class="card-sub">What users currently see when checking for updates</div>
+                </div>
+              </div>
+              <div id="live-update-preview" style="margin-top:16px;">
+                <div class="empty">Loading release info…</div>
+              </div>
             </div>
           </div>
         </div>

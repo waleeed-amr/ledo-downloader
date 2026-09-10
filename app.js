@@ -24,6 +24,7 @@ import {
   updateDoc,
   addDoc,
   setDoc,
+  deleteDoc,
   serverTimestamp,
   getDocs,
   getDoc,
@@ -48,6 +49,8 @@ const db = getFirestore(app);
 const state = {
   tickets: [],
   crashes: [],
+  announcements: [],
+  latestUpdate: null,
   currentUser: null,
   currentRoute: "overview",
   statusFilter: "all",
@@ -60,6 +63,7 @@ const state = {
   unsubscribers: [],
   firstTicketsLoad: true,
   firstCrashesLoad: true,
+  firstAnnouncementsLoad: true,
   account: {
     profile: null,
     preferences: null,
@@ -279,6 +283,8 @@ function navigateTo(route) {
     tickets: ["Tickets", "Manage and respond to user support tickets"],
     users: ["Users", "All users who have contacted support"],
     crashes: ["Crash Reports", "Application crash telemetry"],
+    announcements: ["Broadcast Announcements", "Send pop-up notices & messages to desktop users"],
+    updates: ["App Releases", "Publish updates and configure MediaFire download links"],
     analytics: ["Analytics", "Insights and platform performance"],
     account: ["My Account", "Manage your profile, security, and preferences"],
     settings: ["Settings", "Customize your admin experience"],
@@ -316,13 +322,18 @@ function cleanupListeners() {
   state.unsubscribers = [];
   state.tickets = [];
   state.crashes = [];
+  state.announcements = [];
+  state.latestUpdate = null;
   state.firstTicketsLoad = true;
   state.firstCrashesLoad = true;
+  state.firstAnnouncementsLoad = true;
 }
 
 async function loadAllData() {
   subscribeTickets();
   subscribeCrashes();
+  subscribeAnnouncements();
+  loadLatestUpdate();
 }
 
 function subscribeTickets() {
@@ -654,6 +665,207 @@ function renderCrashes() {
     `
     )
     .join("");
+}
+
+// ============== ANNOUNCEMENTS & RELEASES ==============
+function subscribeAnnouncements() {
+  if (!state.currentUser) return;
+  const q = query(collection(db, "announcements"), orderBy("created_at", "desc"), limit(50));
+  const unsub = onSnapshot(
+    q,
+    (snapshot) => {
+      state.announcements = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      state.firstAnnouncementsLoad = false;
+      renderAnnouncements();
+    },
+    (err) => {
+      console.error("Announcements error:", err);
+      state.firstAnnouncementsLoad = false;
+      renderAnnouncements();
+    }
+  );
+  state.unsubscribers.push(unsub);
+}
+
+function renderAnnouncements() {
+  const container = $("#announcements-list");
+  if (!container) return;
+  if (state.firstAnnouncementsLoad) {
+    container.innerHTML = `<div class="empty">Loading announcements…</div>`;
+    return;
+  }
+  if (state.announcements.length === 0) {
+    container.innerHTML = `<div class="empty">No announcements yet. Use the form to send your first message! 📢</div>`;
+    return;
+  }
+
+  container.innerHTML = state.announcements
+    .map((a) => {
+      const typeBadges = {
+        info: `<span class="badge" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)">INFO</span>`,
+        warning: `<span class="badge" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3)">WARNING</span>`,
+        update: `<span class="badge" style="background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3)">UPDATE</span>`,
+        alert: `<span class="badge" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)">ALERT</span>`,
+      };
+      const badge = typeBadges[a.type] || typeBadges.info;
+      const isHigh = a.priority === "high" ? `<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171">HIGH</span>` : "";
+
+      return `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              ${badge}
+              ${isHigh}
+              <strong style="font-size:15px;color:#f8fafc;">${fmt.escape(a.title || "Untitled")}</strong>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:12px;color:var(--text-muted);">${fmt.timeAgo(a.created_at)}</span>
+              <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:#f87171;border:none;padding:4px 10px;cursor:pointer;border-radius:6px;" onclick="window.handleDeleteAnnouncement('${a.id}')" title="Delete Announcement">
+                Delete
+              </button>
+            </div>
+          </div>
+          <div style="font-size:13.5px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;">${fmt.escape(a.body || "")}</div>
+          ${a.action_url ? `<div style="font-size:12px;color:#60a5fa;"><a href="${fmt.escape(a.action_url)}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:underline;">${fmt.escape(a.action_label || a.action_url)} ↗</a></div>` : ""}
+          ${a.min_version ? `<div style="font-size:11px;color:var(--text-muted);">Target Version: ≥ ${fmt.escape(a.min_version)}</div>` : ""}
+        </div>
+      `;
+    })
+    .join("");
+}
+
+async function handleCreateAnnouncement(e) {
+  e.preventDefault();
+  const title = $("#ann-title").value.trim();
+  const body = $("#ann-body").value.trim();
+  const type = $("#ann-type").value || "info";
+  const priority = $("#ann-priority").value || "normal";
+  const action_url = $("#ann-action-url").value.trim();
+  const action_label = $("#ann-action-label").value.trim();
+  const min_version = $("#ann-min-version").value.trim();
+
+  if (!title || !body) {
+    toast({ type: "warning", title: "Missing fields", message: "Please enter both a title and message." });
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, "announcements"), {
+      title,
+      body,
+      type,
+      priority,
+      active: true,
+      action_url: action_url || "",
+      action_label: action_label || "عرض التفاصيل",
+      min_version: min_version || "",
+      created_at: new Date().toISOString(),
+      author: state.currentUser?.email || "Admin"
+    });
+    toast({ type: "success", title: "Announcement Published!", message: "Users will receive this message on app startup." });
+    $("#ann-form").reset();
+  } catch (err) {
+    console.error("Failed to publish announcement:", err);
+    toast({ type: "error", title: "Publish failed", message: err.message });
+  }
+}
+
+async function handleDeleteAnnouncement(id) {
+  if (!confirm("Are you sure you want to delete this announcement?")) return;
+  try {
+    await deleteDoc(doc(db, "announcements", id));
+    toast({ type: "success", title: "Deleted", message: "Announcement removed." });
+  } catch (err) {
+    toast({ type: "error", title: "Delete failed", message: err.message });
+  }
+}
+window.handleDeleteAnnouncement = handleDeleteAnnouncement;
+
+function loadLatestUpdate() {
+  if (!state.currentUser) return;
+  try {
+    const unsub = onSnapshot(doc(db, "app_config", "latest_update"), (d) => {
+      state.latestUpdate = d.exists() ? d.data() : null;
+      renderLatestUpdate();
+    });
+    state.unsubscribers.push(unsub);
+  } catch (err) {
+    console.error("Error loading release config:", err);
+  }
+}
+
+function renderLatestUpdate() {
+  const container = $("#live-update-preview");
+  if (!container) return;
+  if (!state.latestUpdate) {
+    container.innerHTML = `<div class="empty">No active release published yet. Use the form to release v4.0.0! 🚀</div>`;
+    return;
+  }
+
+  const u = state.latestUpdate;
+  container.innerHTML = `
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(16,185,129,0.3);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;font-weight:700;color:#34d399;font-family:monospace;">v${fmt.escape(u.version || "0.0.0")}</span>
+          ${u.required ? `<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4)">Required Update</span>` : `<span class="badge" style="background:rgba(16,185,129,0.15);color:#34d399;">Optional</span>`}
+        </div>
+        <span style="font-size:12px;color:var(--text-muted);">${fmt.timeAgo(u.released_at)}</span>
+      </div>
+
+      <div>
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px;">Download URL (MediaFire / Direct):</label>
+        <a href="${fmt.escape(u.download_url || "#")}" target="_blank" rel="noopener" style="font-size:13px;color:#60a5fa;word-break:break-all;text-decoration:underline;">
+          ${fmt.escape(u.download_url || "No URL")}
+        </a>
+      </div>
+
+      <div>
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Changelog / Release Notes:</label>
+        <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.6;color:#e2e8f0;white-space:pre-wrap;font-family:inherit;">
+          ${fmt.escape(u.changelog || "No changelog provided.")}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Pre-fill form if inputs empty
+  const verInput = $("#update-version");
+  const urlInput = $("#update-download-url");
+  const notesInput = $("#update-changelog-input");
+  const reqCheck = $("#update-required");
+  if (verInput && !verInput.value) verInput.value = u.version || "";
+  if (urlInput && !urlInput.value) urlInput.value = u.download_url || "";
+  if (notesInput && !notesInput.value) notesInput.value = u.changelog || "";
+  if (reqCheck) reqCheck.checked = !!u.required;
+}
+
+async function handlePublishUpdate(e) {
+  e.preventDefault();
+  const version = $("#update-version").value.trim();
+  const download_url = $("#update-download-url").value.trim();
+  const changelog = $("#update-changelog-input").value.trim();
+  const required = $("#update-required").checked;
+
+  if (!version || !download_url) {
+    toast({ type: "warning", title: "Missing fields", message: "Please provide version and download URL (MediaFire)." });
+    return;
+  }
+
+  try {
+    await setDoc(doc(db, "app_config", "latest_update"), {
+      version,
+      download_url,
+      changelog,
+      required,
+      released_at: new Date().toISOString(),
+      updatedBy: state.currentUser?.email || "Admin"
+    }, { merge: true });
+    toast({ type: "success", title: "Update Published! 🚀", message: `Version ${version} is now live for all users.` });
+  } catch (err) {
+    console.error("Failed to publish update:", err);
+    toast({ type: "error", title: "Publish failed", message: err.message });
+  }
 }
 
 // ============== ANALYTICS ==============
@@ -1285,6 +1497,10 @@ function wireEvents() {
   // Notifications drawer
   $("#notif-btn").addEventListener("click", openDrawer);
   $$("[data-close-drawer]").forEach((el) => el.addEventListener("click", closeDrawer));
+
+  // Announcements & Updates form submit handlers
+  $("#ann-form")?.addEventListener("submit", handleCreateAnnouncement);
+  $("#update-form")?.addEventListener("submit", handlePublishUpdate);
 
   // Keyboard: Cmd/Ctrl+K to focus search
   document.addEventListener("keydown", (e) => {

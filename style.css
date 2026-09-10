@@ -1,11 +1,5 @@
-/* =============================================================
-   LEDO · COMMAND CENTER
-   Premium admin dashboard stylesheet
-   ============================================================= */
-
-/* ============== TOKENS ============== */
 :root {
-  /* Dark theme (default) */
+
   --bg-base: #07080f;
   --bg-1: #0b0d1a;
   --bg-2: #11132a;
@@ -2780,3 +2774,14 @@ body.no-anim *, body.no-anim *::before, body.no-anim *::after {
 
 /* Selection */
 ::selection { background: var(--accent-soft); color: var(--text); }
+
+/* Badge helper */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}

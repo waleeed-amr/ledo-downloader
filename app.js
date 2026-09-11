@@ -894,7 +894,7 @@ function isSafeHttpsUrl(value) {
 }
 
 function isValidReleaseVersion(value) {
-  return /^v?\d+(\.\d+){1,3}([-+][0-9A-Za-z.-]+)?$/.test(value);
+  return /^v?[0-9]+(\.[0-9]+){1,3}([\-+][0-9A-Za-z\.\-]+)?$/.test(value);
 }
 
 async function handlePublishUpdate(e) {

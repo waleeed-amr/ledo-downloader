@@ -459,7 +459,7 @@
               <form id="update-form" style="display:flex;flex-direction:column;gap:16px;margin-top:16px;">
                 <div class="form-group">
                   <label for="update-version">Version Number</label>
-                  <input type="text" id="update-version" class="input" placeholder="e.g. 4.0.0" required />
+                  <input type="text" id="update-version" class="input" placeholder="e.g. 4.0.0" pattern="^v?\d+(\.\d+){1,3}([-+][0-9A-Za-z.-]+)?$" required />
                 </div>
                 <div class="form-group">
                   <label for="update-download-url">MediaFire Download Link</label>
@@ -474,6 +474,19 @@
                   <label for="update-required" style="cursor:pointer;font-weight:600;">
                     Force Update (إلزام المستخدمين بالتحديث)
                   </label>
+                </div>
+                <div class="grid-2" style="gap:12px;">
+                  <div class="form-group">
+                    <label for="update-channel">Release Channel</label>
+                    <select id="update-channel" class="input">
+                      <option value="stable">Stable</option>
+                      <option value="beta">Beta</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="update-sha256">SHA-256 (Optional)</label>
+                    <input type="text" id="update-sha256" class="input" placeholder="64-character installer hash" maxlength="64" />
+                  </div>
                 </div>
                 <button type="submit" class="btn btn-primary" style="background:#10b981;border-color:#059669;margin-top:8px;">
                   <i data-lucide="upload-cloud"></i> Save & Publish Update
@@ -493,6 +506,22 @@
                 <div class="empty">Loading release info…</div>
               </div>
             </div>
+          </div>
+
+          <div class="card" style="margin-top:24px;">
+            <div class="card-head">
+              <div>
+                <h3 style="display:flex;align-items:center;gap:8px;"><i data-lucide="link-2" style="color:#60a5fa"></i> Public App Links</h3>
+                <div class="card-sub">Links displayed in the desktop app’s About page</div>
+              </div>
+            </div>
+            <form id="public-links-form" class="grid-2" style="gap:14px;margin-top:16px;">
+              <div class="form-group"><label for="public-website-url">Official website</label><input type="url" id="public-website-url" class="input" placeholder="https://example.com" /></div>
+              <div class="form-group"><label for="public-support-url">Support page</label><input type="url" id="public-support-url" class="input" placeholder="https://example.com/support" /></div>
+              <div class="form-group"><label for="public-privacy-url">Privacy policy</label><input type="url" id="public-privacy-url" class="input" placeholder="https://example.com/privacy" /></div>
+              <div class="form-group"><label for="public-terms-url">Terms of use</label><input type="url" id="public-terms-url" class="input" placeholder="https://example.com/terms" /></div>
+              <div style="grid-column:1/-1;"><button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save Public Links</button></div>
+            </form>
           </div>
         </div>
 
@@ -1383,6 +1412,26 @@
           </button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ NOTIFICATIONS DRAWER ============ -->
+  <div class="modal" id="crash-modal" hidden>
+    <div class="modal-backdrop" data-close-crash></div>
+    <div class="modal-body" style="max-width:860px;">
+      <div class="modal-head">
+        <div><div class="modal-eyebrow"><i data-lucide="bug"></i><span>Crash report</span></div><h3 id="crash-modal-title">—</h3></div>
+        <button class="icon-btn" data-close-crash aria-label="Close"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-meta">
+        <div class="meta-item"><div class="meta-label">Time</div><div class="meta-value" id="crash-modal-time">—</div></div>
+        <div class="meta-item"><div class="meta-label">Device</div><div class="meta-value" id="crash-modal-device">—</div></div>
+        <div class="meta-item"><div class="meta-label">Domain</div><div class="meta-value mono" id="crash-modal-domain">—</div></div>
+      </div>
+      <div class="modal-section"><div class="meta-label">Message</div><pre id="crash-modal-message" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;margin:8px 0 0;"></pre></div>
+      <div class="modal-section"><div class="meta-label">Stack trace</div><pre id="crash-modal-stack" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;margin:8px 0 0;"></pre></div>
+      <div class="modal-section"><div class="meta-label">Context</div><pre id="crash-modal-context" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:160px;overflow:auto;margin:8px 0 0;"></pre></div>
+      <div class="reply-actions"><button class="btn-ghost" id="btn-copy-crash"><i data-lucide="copy"></i> Copy full report</button></div>
     </div>
   </div>
 

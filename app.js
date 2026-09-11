@@ -51,6 +51,7 @@ const state = {
   crashes: [],
   announcements: [],
   latestUpdate: null,
+  publicLinks: null,
   currentUser: null,
   currentRoute: "overview",
   statusFilter: "all",
@@ -324,6 +325,7 @@ function cleanupListeners() {
   state.crashes = [];
   state.announcements = [];
   state.latestUpdate = null;
+  state.publicLinks = null;
   state.firstTicketsLoad = true;
   state.firstCrashesLoad = true;
   state.firstAnnouncementsLoad = true;
@@ -334,6 +336,7 @@ async function loadAllData() {
   subscribeCrashes();
   subscribeAnnouncements();
   loadLatestUpdate();
+  loadPublicLinks();
 }
 
 function subscribeTickets() {
@@ -656,15 +659,52 @@ function renderCrashes() {
   tbody.innerHTML = state.crashes
     .map(
       (c) => `
-      <tr>
+      <tr data-crash="${c.id}" tabindex="0" role="button" aria-label="Open crash report">
         <td><div class="row-time">${fmt.timeAgo(c.createdAt)}</div></td>
         <td><div class="row-email">${fmt.escape(c.email || "—")}</div></td>
         <td><div class="row-subject">${fmt.escape(c.subject || "—")}</div></td>
-        <td><div class="row-msg" style="max-width:340px; cursor:pointer; transition: all 0.2s;" title="Click to expand/collapse" onclick="if(this.style.whiteSpace==='pre-wrap'){this.style.whiteSpace='nowrap';this.style.maxWidth='340px'}else{this.style.whiteSpace='pre-wrap';this.style.maxWidth='none'}">${fmt.escape(c.message || "—")}</div></td>
+        <td><div class="row-msg" style="max-width:340px;" title="Open full report">${fmt.escape(c.message || "—")}</div></td>
       </tr>
     `
     )
     .join("");
+  $$("#crashes-tbody tr[data-crash]").forEach((row) => {
+    const open = () => openCrashModal(state.crashes.find((crash) => crash.id === row.dataset.crash));
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        open();
+      }
+    });
+  });
+}
+
+function openCrashModal(crash) {
+  if (!crash) return;
+  const modal = $("#crash-modal");
+  $("#crash-modal-title").textContent = crash.subject || crash.error_category || "Crash report";
+  $("#crash-modal-time").textContent = fmt.date(crash.createdAt);
+  $("#crash-modal-device").textContent = crash.email || crash.device_id || "—";
+  $("#crash-modal-domain").textContent = crash.target_domain || "—";
+  $("#crash-modal-message").textContent = crash.raw_message || crash.message || "—";
+  $("#crash-modal-stack").textContent = crash.stack_trace || "No stack trace was supplied.";
+  $("#crash-modal-context").textContent = crash.extra ? JSON.stringify(crash.extra, null, 2) : "No additional context.";
+  $("#btn-copy-crash").onclick = async () => {
+    const details = [crash.subject, crash.raw_message || crash.message, crash.stack_trace, crash.extra && JSON.stringify(crash.extra, null, 2)].filter(Boolean).join("\n\n");
+    try {
+      await navigator.clipboard.writeText(details);
+      toast({ type: "success", title: "Copied", message: "The full crash report is in your clipboard." });
+    } catch (_) {
+      toast({ type: "error", title: "Copy failed", message: "Your browser blocked clipboard access." });
+    }
+  };
+  modal.hidden = false;
+  refreshIcons();
+}
+
+function closeCrashModal() {
+  $("#crash-modal").hidden = true;
 }
 
 // ============== ANNOUNCEMENTS & RELEASES ==============
@@ -834,10 +874,27 @@ function renderLatestUpdate() {
   const urlInput = $("#update-download-url");
   const notesInput = $("#update-changelog-input");
   const reqCheck = $("#update-required");
+  const channelInput = $("#update-channel");
+  const hashInput = $("#update-sha256");
   if (verInput && !verInput.value) verInput.value = u.version || "";
   if (urlInput && !urlInput.value) urlInput.value = u.download_url || "";
   if (notesInput && !notesInput.value) notesInput.value = u.changelog || "";
   if (reqCheck) reqCheck.checked = !!u.required;
+  if (channelInput) channelInput.value = u.channel === "beta" ? "beta" : "stable";
+  if (hashInput && !hashInput.value) hashInput.value = u.sha256 || "";
+}
+
+function isSafeHttpsUrl(value) {
+  if (!value) return true;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch (_) {
+    return false;
+  }
+}
+
+function isValidReleaseVersion(value) {
+  return /^v?\d+(\.\d+){1,3}([-+][0-9A-Za-z.-]+)?$/.test(value);
 }
 
 async function handlePublishUpdate(e) {
@@ -846,9 +903,23 @@ async function handlePublishUpdate(e) {
   const download_url = $("#update-download-url").value.trim();
   const changelog = $("#update-changelog-input").value.trim();
   const required = $("#update-required").checked;
+  const channel = $("#update-channel").value === "beta" ? "beta" : "stable";
+  const sha256 = $("#update-sha256").value.trim().toLowerCase();
 
   if (!version || !download_url) {
     toast({ type: "warning", title: "Missing fields", message: "Please provide version and download URL (MediaFire)." });
+    return;
+  }
+  if (!isValidReleaseVersion(version)) {
+    toast({ type: "warning", title: "Invalid version", message: "Use a version such as 4.0.0 or v4.0.0." });
+    return;
+  }
+  if (!isSafeHttpsUrl(download_url)) {
+    toast({ type: "warning", title: "Secure link required", message: "The installer link must use HTTPS." });
+    return;
+  }
+  if (sha256 && !/^[a-f0-9]{64}$/.test(sha256)) {
+    toast({ type: "warning", title: "Invalid SHA-256", message: "The installer hash must contain exactly 64 hexadecimal characters." });
     return;
   }
 
@@ -858,6 +929,8 @@ async function handlePublishUpdate(e) {
       download_url,
       changelog,
       required,
+      channel,
+      sha256,
       released_at: new Date().toISOString(),
       updatedBy: state.currentUser?.email || "Admin"
     }, { merge: true });
@@ -865,6 +938,49 @@ async function handlePublishUpdate(e) {
   } catch (err) {
     console.error("Failed to publish update:", err);
     toast({ type: "error", title: "Publish failed", message: err.message });
+  }
+}
+
+function loadPublicLinks() {
+  if (!state.currentUser) return;
+  const unsub = onSnapshot(doc(db, "app_config", "public_links"), (snapshot) => {
+    state.publicLinks = snapshot.exists() ? snapshot.data() : {};
+    const fields = {
+      "public-website-url": "website_url",
+      "public-support-url": "support_url",
+      "public-privacy-url": "privacy_url",
+      "public-terms-url": "terms_url",
+    };
+    Object.entries(fields).forEach(([input, key]) => {
+      const el = $(`#${input}`);
+      if (el && document.activeElement !== el) el.value = state.publicLinks[key] || "";
+    });
+  }, (err) => console.error("Public links error:", err));
+  state.unsubscribers.push(unsub);
+}
+
+async function handleSavePublicLinks(event) {
+  event.preventDefault();
+  const fields = {
+    website_url: $("#public-website-url").value.trim(),
+    support_url: $("#public-support-url").value.trim(),
+    privacy_url: $("#public-privacy-url").value.trim(),
+    terms_url: $("#public-terms-url").value.trim(),
+  };
+  if (Object.values(fields).some((url) => url && !isSafeHttpsUrl(url))) {
+    toast({ type: "warning", title: "Secure links required", message: "Website and policy links must use HTTPS." });
+    return;
+  }
+  try {
+    await setDoc(doc(db, "app_config", "public_links"), {
+      ...fields,
+      updated_at: new Date().toISOString(),
+      updatedBy: state.currentUser?.email || "Admin",
+    }, { merge: true });
+    toast({ type: "success", title: "Links saved", message: "The desktop app will show the new public links shortly." });
+  } catch (err) {
+    console.error("Failed to save public links:", err);
+    toast({ type: "error", title: "Save failed", message: err.message });
   }
 }
 
@@ -1196,6 +1312,11 @@ function openTicketModal(ticket, focusReply = false) {
   }
 
   const userId = ticket.userId || ticket.id;
+  // A ticket becomes read as soon as an admin opens its full conversation.
+  updateDoc(doc(db, "chats", ticket.id), {
+    unreadAdmin: false,
+    updatedAt: serverTimestamp(),
+  }).catch((err) => console.debug("Could not mark ticket as read:", err));
   chatUnsub = onSnapshot(
     query(collection(db, `chats/${userId}/messages`), orderBy("createdAt", "asc")),
     (snapshot) => {
@@ -1288,16 +1409,34 @@ async function sendReply() {
     await addDoc(collection(db, `chats/${userId}/messages`), {
       text,
       isAdmin: true,
+      sender: state.currentUser?.uid || "admin",
       createdAt: serverTimestamp(),
     });
-    // mark ticket as in_progress if open
-    if ((state.selectedTicket.status || "open") === "open") {
-      await updateDoc(doc(db, "chats", state.selectedTicket.id), {
-        status: "in_progress",
-        updatedAt: serverTimestamp(),
+    // The chat listener provides instant delivery; the inbox copy ensures a
+    // signed-in user also sees the reply after reopening the account screen.
+    try {
+      await addDoc(collection(db, `users/${userId}/messages`), {
+        text,
+        isAdmin: true,
+        createdAt: serverTimestamp(),
+        chatId: state.selectedTicket.id,
       });
+    } catch (inboxError) {
+      // Guest sessions do not have an inbox, but their live chat message has
+      // already been sent and remains the primary delivery mechanism.
+      console.debug("Inbox copy was not delivered:", inboxError);
     }
-    toast({ type: "success", title: "Reply sent", message: "User will be notified in their inbox." });
+    // mark ticket as in_progress if open
+    await updateDoc(doc(db, "chats", state.selectedTicket.id), {
+      status: (state.selectedTicket.status || "open") === "open" ? "in_progress" : state.selectedTicket.status,
+      unreadUser: true,
+      unreadAdmin: false,
+      lastMessage: text,
+      lastSender: "admin",
+      lastUpdated: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    toast({ type: "success", title: "Reply sent", message: "The user will receive an in-app notification." });
     closeTicketModal();
   } catch (e) {
     console.error(e);
@@ -1473,9 +1612,11 @@ function wireEvents() {
   $$("#ticket-modal [data-close]").forEach((el) =>
     el.addEventListener("click", closeTicketModal)
   );
+  $$("#crash-modal [data-close-crash]").forEach((el) => el.addEventListener("click", closeCrashModal));
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (!$("#ticket-modal").hidden) closeTicketModal();
+      if (!$("#crash-modal").hidden) closeCrashModal();
       if (!$("#notif-drawer").hidden) closeDrawer();
     }
   });
@@ -1501,6 +1642,7 @@ function wireEvents() {
   // Announcements & Updates form submit handlers
   $("#ann-form")?.addEventListener("submit", handleCreateAnnouncement);
   $("#update-form")?.addEventListener("submit", handlePublishUpdate);
+  $("#public-links-form")?.addEventListener("submit", handleSavePublicLinks);
 
   // Keyboard: Cmd/Ctrl+K to focus search
   document.addEventListener("keydown", (e) => {

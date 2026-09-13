@@ -1310,19 +1310,40 @@ async function handlePublishUpdate(e) {
     updatedBy: state.currentUser?.email || "Admin"
   };
 
+  const btnSubmit = $("#update-form").querySelector("button[type='submit']");
+  const originalHtml = btnSubmit.innerHTML;
+  btnSubmit.disabled = true;
+  btnSubmit.innerHTML = `<i data-lucide="loader"></i> Publishing...`;
+  refreshIcons();
+
+  const withTimeout = (promise, ms) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), ms))
+    ]);
+  };
+
   try {
     // 1. Save to app_releases/{version} for history
-    await setDoc(doc(db, "app_releases", version.replace(/^v/i, "")), releasePayload);
+    await withTimeout(setDoc(doc(db, "app_releases", version.replace(/^v/i, "")), releasePayload), 8000);
 
     // 2. Update the latest_update pointer
-    await setDoc(doc(db, "app_config", "latest_update"), releasePayload, { merge: true });
+    await withTimeout(setDoc(doc(db, "app_config", "latest_update"), releasePayload, { merge: true }), 8000);
 
     logAdminActivity("update", `Published release v${version}`, `Channel: ${channel}`);
     toast({ type: "success", title: "Update Published! 🚀", message: `Version ${version} is now live for all users.` });
     $("#update-form").reset();
   } catch (err) {
     console.error("Failed to publish update:", err);
-    toast({ type: "error", title: "Publish failed", message: err.message });
+    let msg = err.message;
+    if (msg.includes("timed out")) {
+      msg = "Connection blocked. Please turn off Brave Shields or your adblocker for this site.";
+    }
+    toast({ type: "error", title: "Publish failed", message: msg, duration: 6000 });
+  } finally {
+    btnSubmit.disabled = false;
+    btnSubmit.innerHTML = originalHtml;
+    refreshIcons();
   }
 }
 

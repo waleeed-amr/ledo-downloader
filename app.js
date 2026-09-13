@@ -952,10 +952,23 @@ async function handleCreateAnnouncement(e) {
     schedule_end: schedule_end ? new Date(schedule_end).toISOString() : ""
   };
 
+  const btnSubmit = $("#btn-ann-submit");
+  const btnSpan = btnSubmit.querySelector("span");
+  const originalText = btnSpan.textContent;
+  btnSubmit.disabled = true;
+  btnSpan.textContent = id ? "Saving..." : "Publishing...";
+
+  const withTimeout = (promise, ms) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), ms))
+    ]);
+  };
+
   try {
     if (id) {
       payload.updated_at = new Date().toISOString();
-      await updateDoc(doc(db, "announcements", id), payload);
+      await withTimeout(updateDoc(doc(db, "announcements", id), payload), 8000);
       logAdminActivity("update", `Updated announcement`, `Title: ${title} | Status: ${status}`);
       toast({ type: "success", title: "Announcement Updated" });
       resetAnnForm();
@@ -963,14 +976,21 @@ async function handleCreateAnnouncement(e) {
       payload.created_at = new Date().toISOString();
       payload.author = state.currentUser?.email || "Admin";
       payload.stats = { views: 0, clicks: 0 };
-      await addDoc(collection(db, "announcements"), payload);
+      await withTimeout(addDoc(collection(db, "announcements"), payload), 8000);
       logAdminActivity("update", `Published announcement`, `Title: ${title} | Status: ${status}`);
       toast({ type: "success", title: "Announcement Published!" });
       resetAnnForm();
     }
   } catch (err) {
     console.error("Failed to publish announcement:", err);
-    toast({ type: "error", title: "Publish failed", message: err.message });
+    let msg = err.message;
+    if (msg.includes("timed out")) {
+      msg = "Connection blocked. Please turn off Brave Shields or your adblocker for this site.";
+    }
+    toast({ type: "error", title: "Publish failed", message: msg, duration: 6000 });
+  } finally {
+    btnSubmit.disabled = false;
+    btnSpan.textContent = id ? "Save Changes" : "Publish Announcement";
   }
 }
 

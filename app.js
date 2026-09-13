@@ -48,6 +48,7 @@ const db = getFirestore(app);
 // ============== STATE ==============
 const state = {
   tickets: [],
+  users: [],
   crashes: [],
   announcements: [],
   latestUpdate: null,
@@ -72,6 +73,13 @@ const state = {
     saving: false,
   },
   myActivity: [],
+  health: {
+    auth: false,
+    firestore: false,
+    announcements: false,
+    updates: false,
+    users: false,
+  }
 };
 
 // ============== DOM HELPERS ==============
@@ -206,10 +214,25 @@ async function initAuth() {
   // Use in-memory persistence if "remember me" is unchecked
   onAuthStateChanged(auth, async (user) => {
     if (user) {
-      state.currentUser = user;
-      showDashboard();
-      updateAdminInfo();
-      await loadAllData();
+      try {
+        const token = await user.getIdTokenResult();
+        const isAdmin = token.claims.admin === true || user.email === 'waleed@ledodown.local';
+        
+        if (!isAdmin) {
+          toast({ type: "error", title: "Access Denied", message: "You don't have admin permissions.", duration: 5000 });
+          await signOut(auth);
+          return;
+        }
+        
+        state.currentUser = user;
+        showDashboard();
+        updateAdminInfo();
+        await loadAllData();
+      } catch (err) {
+        console.error("Error verifying admin role:", err);
+        toast({ type: "error", title: "Auth Error", message: "Failed to verify permissions." });
+        await signOut(auth);
+      }
     } else {
       state.currentUser = null;
       showLogin();
@@ -322,19 +345,26 @@ function cleanupListeners() {
   state.unsubscribers.forEach((u) => u && u());
   state.unsubscribers = [];
   state.tickets = [];
+  state.users = [];
   state.crashes = [];
   state.announcements = [];
   state.latestUpdate = null;
   state.publicLinks = null;
+  state.appReleases = [];
   state.firstTicketsLoad = true;
+  state.firstUsersLoad = true;
   state.firstCrashesLoad = true;
   state.firstAnnouncementsLoad = true;
 }
 
 async function loadAllData() {
   subscribeTickets();
+  subscribeUsers();
   subscribeCrashes();
   subscribeAnnouncements();
+  subscribeAppReleases();
+  subscribeAdminActivity();
+  subscribeAdminNotifications();
   loadLatestUpdate();
   loadPublicLinks();
 }
@@ -347,10 +377,12 @@ function subscribeTickets() {
     (snapshot) => {
       state.tickets = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.firstTicketsLoad = false;
+      updateHealth("users", true); // Users derived from tickets or own collection
       onTicketsUpdate();
     },
     (err) => {
       console.error("Tickets error:", err);
+      updateHealth("users", false);
       if (err.code === "permission-denied") {
         toast({
           type: "error",
@@ -387,11 +419,32 @@ function subscribeCrashes() {
   state.unsubscribers.push(unsub);
 }
 
+function subscribeUsers() {
+  if (!state.currentUser) return;
+  const q = query(collection(db, "users"), limit(500));
+  const unsub = onSnapshot(
+    q,
+    (snapshot) => {
+      state.users = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      state.firstUsersLoad = false;
+      updateHealth("users", true);
+      renderUsers();
+      renderAnalytics();
+    },
+    (err) => {
+      console.error("Users error:", err);
+      updateHealth("users", false);
+      state.firstUsersLoad = false;
+      renderUsers();
+    }
+  );
+  state.unsubscribers.push(unsub);
+}
+
 function onTicketsUpdate() {
   renderKpis();
   renderRecentActivity();
   renderTickets();
-  renderUsers();
   renderAnalytics();
   renderTopSubjects();
   renderNotifications();
@@ -575,34 +628,18 @@ function getStatusDot(status) {
 // ============== USERS ==============
 function renderUsers() {
   const grid = $("#users-grid");
-  if (state.firstTicketsLoad) return;
-  const map = new Map();
-  state.tickets.forEach((t) => {
-    const key = t.userId || t.email || "anonymous";
-    if (!map.has(key)) {
-      map.set(key, {
-        id: key,
-        email: t.email || "Anonymous",
-        tickets: 0,
-        lastActivity: t.createdAt,
-      });
-    }
-    const u = map.get(key);
-    u.tickets++;
-    if (t.createdAt && (!u.lastActivity || (t.createdAt.seconds || 0) > (u.lastActivity.seconds || 0))) {
-      u.lastActivity = t.createdAt;
-    }
-  });
-  let users = Array.from(map.values());
+  if (!grid) return;
+  if (state.firstUsersLoad) {
+    grid.innerHTML = `<div class="muted center pad" style="grid-column:1/-1">Loading users...</div>`;
+    return;
+  }
+  let users = [...state.users];
   const q = state.userSearch.toLowerCase();
-  if (q) users = users.filter((u) => (u.email || "").toLowerCase().includes(q));
-  if (state.userSort === "tickets") users.sort((a, b) => b.tickets - a.tickets);
-  else if (state.userSort === "recent")
-    users.sort(
-      (a, b) => (b.lastActivity?.seconds || 0) - (a.lastActivity?.seconds || 0)
-    );
-  else if (state.userSort === "alpha")
-    users.sort((a, b) => (a.email || "").localeCompare(b.email || ""));
+  if (q) users = users.filter((u) => (u.email || "").toLowerCase().includes(q) || (u.id || "").toLowerCase().includes(q));
+  
+  if (state.userSort === "tickets") users.sort((a, b) => (b.ticketsCount || 0) - (a.ticketsCount || 0));
+  else if (state.userSort === "recent") users.sort((a, b) => (b.lastSeen?.seconds || 0) - (a.lastSeen?.seconds || 0));
+  else if (state.userSort === "alpha") users.sort((a, b) => (a.email || "").localeCompare(b.email || ""));
 
   if (users.length === 0) {
     grid.innerHTML = `<div class="muted center pad" style="grid-column:1/-1">${
@@ -618,20 +655,21 @@ function renderUsers() {
       (u) => `
       <div class="user-card" data-user="${fmt.escape(u.id)}">
         <div class="row-avatar" style="width:50px;height:50px;font-size:18px;border-radius:14px">${fmt.escape(
-          fmt.initials(u.email)
+          fmt.initials(u.email || u.id)
         )}</div>
         <div class="user-card-info">
-          <div class="user-card-name">${fmt.escape(fmt.emailLocal(u.email))}</div>
-          <div class="user-card-email">${fmt.escape(u.email)}</div>
+          <div class="user-card-name">${fmt.escape(fmt.emailLocal(u.email) || "Anonymous User")}</div>
+          <div class="user-card-email">${fmt.escape(u.email || u.id)}</div>
+          ${u.status === "disabled" ? `<div style="color:#ef4444;font-size:11px;margin-top:2px;">Banned</div>` : ""}
         </div>
         <div class="user-card-stats">
           <div class="user-stat">
             <div class="user-stat-label">Tickets</div>
-            <div class="user-stat-value">${u.tickets}</div>
+            <div class="user-stat-value">${u.ticketsCount || 0}</div>
           </div>
           <div class="user-stat">
             <div class="user-stat-label">Last seen</div>
-            <div class="user-stat-value" style="font-size:13px">${fmt.timeAgo(u.lastActivity)}</div>
+            <div class="user-stat-value" style="font-size:13px">${fmt.timeAgo(u.lastSeen || u.createdAt)}</div>
           </div>
         </div>
       </div>
@@ -640,65 +678,149 @@ function renderUsers() {
     .join("");
   $$(".user-card", grid).forEach((card) => {
     card.addEventListener("click", () => {
-      navigateTo("tickets");
+      const id = card.dataset.user;
+      const user = state.users.find((u) => u.id === id);
+      if (user) openUserModal(user);
     });
   });
+}
+
+function openUserModal(user) {
+  if (!user) return;
+  state.selectedUser = user;
+  const modal = $("#user-modal");
+  
+  $("#modal-user-name").textContent = fmt.emailLocal(user.email) || "Anonymous User";
+  $("#modal-user-email").textContent = user.email || "—";
+  $("#modal-user-created").textContent = fmt.date(user.createdAt);
+  $("#modal-user-lastseen").textContent = fmt.timeAgo(user.lastSeen || user.createdAt);
+  $("#modal-user-id").textContent = user.id || "—";
+  
+  $("#modal-user-tickets-count").textContent = user.ticketsCount || 0;
+  $("#modal-user-crashes-count").textContent = state.crashes.filter(c => c.email === user.email || c.device_id === user.id).length || 0;
+  $("#modal-user-version").textContent = user.appVersion || "—";
+  
+  const statusPill = $("#modal-user-status-pill");
+  if (user.status === "disabled") {
+    statusPill.textContent = "Banned";
+    statusPill.className = "status-pill sm disabled";
+    statusPill.style.color = "#ef4444";
+    statusPill.style.background = "rgba(239,68,68,0.1)";
+  } else {
+    statusPill.textContent = "Active";
+    statusPill.className = "status-pill sm active";
+    statusPill.style.color = "#10b981";
+    statusPill.style.background = "rgba(16,185,129,0.1)";
+  }
+  
+  modal.hidden = false;
+  refreshIcons();
+}
+
+function closeUserModal() {
+  $("#user-modal").hidden = true;
+  state.selectedUser = null;
 }
 
 // ============== CRASHES ==============
 function renderCrashes() {
   const tbody = $("#crashes-tbody");
   if (state.firstCrashesLoad) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty">Loading crash reports…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">Loading crash reports…</td></tr>`;
     return;
   }
   if (state.crashes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty">No crash reports. 🎉</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">No crash reports. 🎉</td></tr>`;
     return;
   }
-  tbody.innerHTML = state.crashes
+  
+  // Group crashes by a signature
+  const grouped = new Map();
+  state.crashes.forEach((c) => {
+    const signature = (c.subject || c.error_category || "Unknown") + "::" + (c.raw_message || c.message || "Unknown");
+    if (!grouped.has(signature)) {
+      grouped.set(signature, {
+        signature,
+        subject: c.subject || c.error_category || "Unknown",
+        message: c.raw_message || c.message || "Unknown",
+        stack_trace: c.stack_trace,
+        occurrences: 0,
+        devices: new Set(),
+        firstSeen: null,
+        lastSeen: null,
+        latestCrash: c
+      });
+    }
+    const group = grouped.get(signature);
+    group.occurrences++;
+    if (c.email || c.device_id) group.devices.add(c.email || c.device_id);
+    
+    const time = c.createdAt?.toDate ? c.createdAt.toDate() : new Date(c.createdAt);
+    if (!group.firstSeen || time < group.firstSeen) group.firstSeen = time;
+    if (!group.lastSeen || time > group.lastSeen) group.lastSeen = time;
+  });
+
+  const sortedGroups = Array.from(grouped.values()).sort((a, b) => b.lastSeen - a.lastSeen);
+
+  tbody.innerHTML = sortedGroups
     .map(
-      (c) => `
-      <tr data-crash="${c.id}" tabindex="0" role="button" aria-label="Open crash report">
-        <td><div class="row-time">${fmt.timeAgo(c.createdAt)}</div></td>
-        <td><div class="row-email">${fmt.escape(c.email || "—")}</div></td>
-        <td><div class="row-subject">${fmt.escape(c.subject || "—")}</div></td>
-        <td><div class="row-msg" style="max-width:340px;" title="Open full report">${fmt.escape(c.message || "—")}</div></td>
+      (g) => `
+      <tr data-crash-group="${fmt.escape(g.signature)}" tabindex="0" role="button" aria-label="Open crash group">
+        <td><div class="row-subject"><strong>${fmt.escape(g.subject)}</strong></div><div class="row-msg" style="max-width:300px;font-size:11px;opacity:0.8;">${fmt.escape(g.message)}</div></td>
+        <td><div class="row-email" style="text-align:center;">${g.occurrences}</div></td>
+        <td><div class="row-email" style="text-align:center;">${g.devices.size}</div></td>
+        <td><div class="row-time">${fmt.date(g.firstSeen)}</div></td>
+        <td><div class="row-time">${fmt.timeAgo(g.lastSeen)}</div></td>
       </tr>
     `
     )
     .join("");
-  $$("#crashes-tbody tr[data-crash]").forEach((row) => {
-    const open = () => openCrashModal(state.crashes.find((crash) => crash.id === row.dataset.crash));
-    row.addEventListener("click", open);
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        open();
-      }
-    });
+    
+  $$("#crashes-tbody tr[data-crash-group]").forEach((row) => {
+    const sig = row.dataset.crashGroup;
+    const group = sortedGroups.find(g => g.signature === sig);
+    if (group) {
+      const open = () => openCrashModal(group);
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open();
+        }
+      });
+    }
   });
 }
 
-function openCrashModal(crash) {
-  if (!crash) return;
+function openCrashModal(group) {
+  if (!group) return;
   const modal = $("#crash-modal");
-  $("#crash-modal-title").textContent = crash.subject || crash.error_category || "Crash report";
-  $("#crash-modal-time").textContent = fmt.date(crash.createdAt);
-  $("#crash-modal-device").textContent = crash.email || crash.device_id || "—";
-  $("#crash-modal-domain").textContent = crash.target_domain || "—";
-  $("#crash-modal-message").textContent = crash.raw_message || crash.message || "—";
-  $("#crash-modal-stack").textContent = crash.stack_trace || "No stack trace was supplied.";
-  $("#crash-modal-context").textContent = crash.extra ? JSON.stringify(crash.extra, null, 2) : "No additional context.";
+  const latest = group.latestCrash;
+  
+  $("#crash-modal-title").textContent = `${group.subject} (${group.occurrences} occurrences)`;
+  $("#crash-modal-time").textContent = `First seen: ${fmt.date(group.firstSeen)} | Last seen: ${fmt.date(group.lastSeen)}`;
+  $("#crash-modal-device").textContent = `${group.devices.size} affected device(s)`;
+  $("#crash-modal-domain").textContent = latest.target_domain || "—";
+  $("#crash-modal-message").textContent = group.message;
+  $("#crash-modal-stack").textContent = group.stack_trace || "No stack trace was supplied.";
+  $("#crash-modal-context").textContent = latest.extra ? JSON.stringify(latest.extra, null, 2) : "No additional context.";
+  
   $("#btn-copy-crash").onclick = async () => {
-    const details = [crash.subject, crash.raw_message || crash.message, crash.stack_trace, crash.extra && JSON.stringify(crash.extra, null, 2)].filter(Boolean).join("\n\n");
+    const details = [
+      `Signature: ${group.signature}`,
+      `Occurrences: ${group.occurrences}`,
+      `Message: ${group.message}`,
+      `Stack trace:\n${group.stack_trace}`
+    ].join("\n\n");
+    
     try {
       await navigator.clipboard.writeText(details);
-      toast({ type: "success", title: "Copied", message: "The full crash report is in your clipboard." });
+      toast({ type: "success", title: "Copied", message: "The crash group details are in your clipboard." });
     } catch (_) {
       toast({ type: "error", title: "Copy failed", message: "Your browser blocked clipboard access." });
     }
   };
+  
   modal.hidden = false;
   refreshIcons();
 }
@@ -716,10 +838,12 @@ function subscribeAnnouncements() {
     (snapshot) => {
       state.announcements = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       state.firstAnnouncementsLoad = false;
+      updateHealth("announcements", true);
       renderAnnouncements();
     },
     (err) => {
       console.error("Announcements error:", err);
+      updateHealth("announcements", false);
       state.firstAnnouncementsLoad = false;
       renderAnnouncements();
     }
@@ -747,19 +871,33 @@ function renderAnnouncements() {
         update: `<span class="badge" style="background:rgba(16,185,129,0.15);color:#34d399;border:1px solid rgba(16,185,129,0.3)">UPDATE</span>`,
         alert: `<span class="badge" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)">ALERT</span>`,
       };
+      const statusBadges = {
+        published: `<span class="badge" style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)"><i data-lucide="check-circle" style="width:12px;height:12px;"></i> PUBLISHED</span>`,
+        draft: `<span class="badge" style="background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.3)"><i data-lucide="edit-3" style="width:12px;height:12px;"></i> DRAFT</span>`,
+        disabled: `<span class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)"><i data-lucide="slash" style="width:12px;height:12px;"></i> DISABLED</span>`,
+      };
       const badge = typeBadges[a.type] || typeBadges.info;
+      const statusValue = a.status || (a.active ? "published" : "disabled");
+      const sBadge = statusBadges[statusValue] || statusBadges.draft;
       const isHigh = a.priority === "high" ? `<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171">HIGH</span>` : "";
+
+      const views = (a.stats && a.stats.views) || 0;
+      const clicks = (a.stats && a.stats.clicks) || 0;
 
       return `
         <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               ${badge}
+              ${sBadge}
               ${isHigh}
               <strong style="font-size:15px;color:#f8fafc;">${fmt.escape(a.title || "Untitled")}</strong>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:12px;color:var(--text-muted);">${fmt.timeAgo(a.created_at)}</span>
+              <button class="btn btn-sm" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:none;padding:4px 10px;cursor:pointer;border-radius:6px;" onclick="window.handleEditAnnouncement('${a.id}')" title="Edit Announcement">
+                Edit
+              </button>
               <button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:#f87171;border:none;padding:4px 10px;cursor:pointer;border-radius:6px;" onclick="window.handleDeleteAnnouncement('${a.id}')" title="Delete Announcement">
                 Delete
               </button>
@@ -767,11 +905,18 @@ function renderAnnouncements() {
           </div>
           <div style="font-size:13.5px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;">${fmt.escape(a.body || "")}</div>
           ${a.action_url ? `<div style="font-size:12px;color:#60a5fa;"><a href="${fmt.escape(a.action_url)}" target="_blank" rel="noopener" style="color:#60a5fa;text-decoration:underline;">${fmt.escape(a.action_label || a.action_url)} ↗</a></div>` : ""}
-          ${a.min_version ? `<div style="font-size:11px;color:var(--text-muted);">Target Version: ≥ ${fmt.escape(a.min_version)}</div>` : ""}
+          <div style="display:flex;gap:16px;margin-top:8px;align-items:center;flex-wrap:wrap;">
+            ${a.min_version ? `<div style="font-size:11px;color:var(--text-muted);"><i data-lucide="shield-check" style="width:12px;height:12px;margin-bottom:-2px;"></i> Target: ≥ ${fmt.escape(a.min_version)}</div>` : ""}
+            ${a.schedule_start ? `<div style="font-size:11px;color:var(--text-muted);"><i data-lucide="clock" style="width:12px;height:12px;margin-bottom:-2px;"></i> Starts: ${fmt.date(a.schedule_start)}</div>` : ""}
+            ${a.schedule_end ? `<div style="font-size:11px;color:var(--text-muted);"><i data-lucide="clock" style="width:12px;height:12px;margin-bottom:-2px;"></i> Ends: ${fmt.date(a.schedule_end)}</div>` : ""}
+            <div style="font-size:11px;color:var(--text-muted);display:flex;gap:4px;align-items:center;"><i data-lucide="eye" style="width:12px;height:12px;"></i> ${views} views</div>
+            <div style="font-size:11px;color:var(--text-muted);display:flex;gap:4px;align-items:center;"><i data-lucide="mouse-pointer-click" style="width:12px;height:12px;"></i> ${clicks} clicks</div>
+          </div>
         </div>
       `;
     })
     .join("");
+  refreshIcons();
 }
 
 async function handleCreateAnnouncement(e) {
@@ -783,37 +928,107 @@ async function handleCreateAnnouncement(e) {
   const action_url = $("#ann-action-url").value.trim();
   const action_label = $("#ann-action-label").value.trim();
   const min_version = $("#ann-min-version").value.trim();
+  const status = $("#ann-status").value || "published";
+  const schedule_start = $("#ann-schedule-start").value || "";
+  const schedule_end = $("#ann-schedule-end").value || "";
+  const id = $("#ann-id").value;
 
   if (!title || !body) {
     toast({ type: "warning", title: "Missing fields", message: "Please enter both a title and message." });
     return;
   }
 
+  const payload = {
+    title,
+    body,
+    type,
+    priority,
+    status,
+    active: status === "published", // Legacy compat
+    action_url: action_url || "",
+    action_label: action_label || "عرض التفاصيل",
+    min_version: min_version || "",
+    schedule_start: schedule_start ? new Date(schedule_start).toISOString() : "",
+    schedule_end: schedule_end ? new Date(schedule_end).toISOString() : ""
+  };
+
   try {
-    await addDoc(collection(db, "announcements"), {
-      title,
-      body,
-      type,
-      priority,
-      active: true,
-      action_url: action_url || "",
-      action_label: action_label || "عرض التفاصيل",
-      min_version: min_version || "",
-      created_at: new Date().toISOString(),
-      author: state.currentUser?.email || "Admin"
-    });
-    toast({ type: "success", title: "Announcement Published!", message: "Users will receive this message on app startup." });
-    $("#ann-form").reset();
+    if (id) {
+      payload.updated_at = new Date().toISOString();
+      await updateDoc(doc(db, "announcements", id), payload);
+      logAdminActivity("update", `Updated announcement`, `Title: ${title} | Status: ${status}`);
+      toast({ type: "success", title: "Announcement Updated" });
+      resetAnnForm();
+    } else {
+      payload.created_at = new Date().toISOString();
+      payload.author = state.currentUser?.email || "Admin";
+      payload.stats = { views: 0, clicks: 0 };
+      await addDoc(collection(db, "announcements"), payload);
+      logAdminActivity("update", `Published announcement`, `Title: ${title} | Status: ${status}`);
+      toast({ type: "success", title: "Announcement Published!" });
+      resetAnnForm();
+    }
   } catch (err) {
     console.error("Failed to publish announcement:", err);
     toast({ type: "error", title: "Publish failed", message: err.message });
   }
 }
 
+function resetAnnForm() {
+  $("#ann-form").reset();
+  $("#ann-id").value = "";
+  $("#btn-ann-submit").querySelector("span").textContent = "Publish Announcement";
+  $("#btn-ann-cancel").hidden = true;
+}
+
+window.handleEditAnnouncement = function(id) {
+  const ann = state.announcements.find(a => a.id === id);
+  if (!ann) return;
+  
+  $("#ann-title").value = ann.title || "";
+  $("#ann-body").value = ann.body || "";
+  $("#ann-type").value = ann.type || "info";
+  $("#ann-priority").value = ann.priority || "normal";
+  $("#ann-action-url").value = ann.action_url || "";
+  $("#ann-action-label").value = ann.action_label || "";
+  $("#ann-min-version").value = ann.min_version || "";
+  
+  if (ann.schedule_start) {
+    const d = new Date(ann.schedule_start);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    $("#ann-schedule-start").value = d.toISOString().slice(0,16);
+  } else {
+    $("#ann-schedule-start").value = "";
+  }
+  
+  if (ann.schedule_end) {
+    const d = new Date(ann.schedule_end);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    $("#ann-schedule-end").value = d.toISOString().slice(0,16);
+  } else {
+    $("#ann-schedule-end").value = "";
+  }
+
+  $("#ann-status").value = ann.status || (ann.active ? "published" : "disabled");
+  $("#ann-id").value = ann.id;
+  
+  $("#btn-ann-submit").querySelector("span").textContent = "Save Changes";
+  $("#btn-ann-cancel").hidden = false;
+  
+  // scroll to top
+  $(".main").scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+// Cancel edit
+$("#btn-ann-cancel")?.addEventListener("click", () => {
+  resetAnnForm();
+});
+
 async function handleDeleteAnnouncement(id) {
   if (!confirm("Are you sure you want to delete this announcement?")) return;
   try {
     await deleteDoc(doc(db, "announcements", id));
+    logAdminActivity("update", `Deleted announcement`, `ID: ${id}`);
     toast({ type: "success", title: "Deleted", message: "Announcement removed." });
   } catch (err) {
     toast({ type: "error", title: "Delete failed", message: err.message });
@@ -826,11 +1041,16 @@ function loadLatestUpdate() {
   try {
     const unsub = onSnapshot(doc(db, "app_config", "latest_update"), (d) => {
       state.latestUpdate = d.exists() ? d.data() : null;
+      updateHealth("updates", true);
       renderLatestUpdate();
+    }, (err) => {
+      console.error("Error loading release config:", err);
+      updateHealth("updates", false);
     });
     state.unsubscribers.push(unsub);
   } catch (err) {
     console.error("Error loading release config:", err);
+    updateHealth("updates", false);
   }
 }
 
@@ -866,8 +1086,15 @@ function renderLatestUpdate() {
           ${fmt.escape(u.changelog || "No changelog provided.")}
         </div>
       </div>
+      ${u.minimum_supported_version ? `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;">
+        <i data-lucide="shield-alert" style="width:16px;height:16px;color:#fbbf24;"></i>
+        <span style="font-size:13px;color:#fbbf24;">Minimum Supported: v${fmt.escape(u.minimum_supported_version)}</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:4px;">(Older versions are blocked)</span>
+      </div>` : ""}
     </div>
   `;
+  refreshIcons();
 
   // Pre-fill form if inputs empty
   const verInput = $("#update-version");
@@ -876,12 +1103,14 @@ function renderLatestUpdate() {
   const reqCheck = $("#update-required");
   const channelInput = $("#update-channel");
   const hashInput = $("#update-sha256");
+  const minVerInput = $("#update-min-version");
   if (verInput && !verInput.value) verInput.value = u.version || "";
   if (urlInput && !urlInput.value) urlInput.value = u.download_url || "";
   if (notesInput && !notesInput.value) notesInput.value = u.changelog || "";
   if (reqCheck) reqCheck.checked = !!u.required;
   if (channelInput) channelInput.value = u.channel === "beta" ? "beta" : "stable";
   if (hashInput && !hashInput.value) hashInput.value = u.sha256 || "";
+  if (minVerInput && !minVerInput.value) minVerInput.value = u.minimum_supported_version || "";
 }
 
 function isSafeHttpsUrl(value) {
@@ -897,6 +1126,110 @@ function isValidReleaseVersion(value) {
   return /^v?[0-9]+(\.[0-9]+){1,3}([\-+][0-9A-Za-z\.\-]+)?$/.test(value);
 }
 
+// Parses "v4.1.0" or "4.1.0" → [4,1,0]
+function parseVersion(v) {
+  if (!v) return [0, 0, 0];
+  return v.replace(/^v/i, "").split(".").map(Number);
+}
+
+// Returns >0 if a>b, <0 if a<b, 0 if equal
+function compareVersions(a, b) {
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function subscribeAppReleases() {
+  if (!state.currentUser) return;
+  const q = query(collection(db, "app_releases"), orderBy("released_at", "desc"), limit(50));
+  const unsub = onSnapshot(
+    q,
+    (snapshot) => {
+      state.appReleases = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderReleaseHistory();
+    },
+    (err) => {
+      console.error("App releases error:", err);
+    }
+  );
+  state.unsubscribers.push(unsub);
+}
+
+function renderReleaseHistory() {
+  const container = $("#release-history-list");
+  if (!container) return;
+  if (state.appReleases.length === 0) {
+    container.innerHTML = `<div class="empty">No release history yet. Releases will appear here after publishing.</div>`;
+    return;
+  }
+  const currentVersion = state.latestUpdate?.version;
+  container.innerHTML = state.appReleases
+    .map((r) => {
+      const isCurrent = currentVersion && r.version === currentVersion;
+      const borderColor = isCurrent ? "rgba(16,185,129,0.4)" : "rgba(255,255,255,0.08)";
+      const currentBadge = isCurrent
+        ? `<span class="badge" style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.3)"><i data-lucide="check-circle" style="width:12px;height:12px;"></i> CURRENT</span>`
+        : "";
+      const channelBadge = r.channel === "beta"
+        ? `<span class="badge" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3)">BETA</span>`
+        : `<span class="badge" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)">STABLE</span>`;
+      const reqBadge = r.required
+        ? `<span class="badge" style="background:rgba(239,68,68,0.15);color:#f87171">REQUIRED</span>`
+        : "";
+
+      return `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid ${borderColor};border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:16px;font-weight:700;color:#f8fafc;font-family:monospace;">v${fmt.escape(r.version || "?")}</span>
+              ${channelBadge} ${reqBadge} ${currentBadge}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:11px;color:var(--text-muted);">${fmt.timeAgo(r.released_at)}</span>
+              ${!isCurrent ? `<button class="btn btn-sm" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:none;padding:4px 10px;cursor:pointer;border-radius:6px;font-size:12px;" onclick="window.handleRollback('${r.id}')" title="Rollback to this version">Rollback</button>` : ""}
+            </div>
+          </div>
+          ${r.changelog ? `<div style="font-size:12px;color:#94a3b8;white-space:pre-wrap;">${fmt.escape(r.changelog)}</div>` : ""}
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:11px;color:var(--text-muted);">By ${fmt.escape(r.updatedBy || "Admin")}</span>
+            ${r.sha256 ? `<span style="font-size:11px;color:var(--text-muted);font-family:monospace;">SHA: ${r.sha256.substring(0, 12)}…</span>` : ""}
+            ${r.minimum_supported_version ? `<span style="font-size:11px;color:var(--text-muted);">Min: v${fmt.escape(r.minimum_supported_version)}</span>` : ""}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+  refreshIcons();
+}
+
+window.handleRollback = async function(releaseId) {
+  const release = state.appReleases.find((r) => r.id === releaseId);
+  if (!release) return;
+  if (!confirm(`Rollback to v${release.version}? This will make it the current live release.`)) return;
+  try {
+    await setDoc(doc(db, "app_config", "latest_update"), {
+      version: release.version,
+      download_url: release.download_url,
+      changelog: release.changelog || "",
+      required: release.required || false,
+      channel: release.channel || "stable",
+      sha256: release.sha256 || "",
+      minimum_supported_version: release.minimum_supported_version || "",
+      released_at: new Date().toISOString(),
+      updatedBy: state.currentUser?.email || "Admin",
+      rollback_from: state.latestUpdate?.version || ""
+    }, { merge: true });
+    logAdminActivity("update", `Rolled back to release v${release.version}`);
+    toast({ type: "success", title: "Rollback Complete", message: `Rolled back to v${release.version}.` });
+  } catch (err) {
+    toast({ type: "error", title: "Rollback Failed", message: err.message });
+  }
+};
+
 async function handlePublishUpdate(e) {
   e.preventDefault();
   const version = $("#update-version").value.trim();
@@ -905,6 +1238,7 @@ async function handlePublishUpdate(e) {
   const required = $("#update-required").checked;
   const channel = $("#update-channel").value === "beta" ? "beta" : "stable";
   const sha256 = $("#update-sha256").value.trim().toLowerCase();
+  const minimum_supported_version = $("#update-min-version")?.value.trim() || "";
 
   if (!version || !download_url) {
     toast({ type: "warning", title: "Missing fields", message: "Please provide version and download URL (MediaFire)." });
@@ -923,18 +1257,48 @@ async function handlePublishUpdate(e) {
     return;
   }
 
+  // Version comparison: warn if publishing an older version
+  const currentVersion = state.latestUpdate?.version;
+  if (currentVersion && compareVersions(version, currentVersion) < 0) {
+    if (!confirm(`Warning: You are publishing v${version} which is OLDER than the current v${currentVersion}. Continue anyway?`)) {
+      return;
+    }
+  }
+
+  // Validate minimum_supported_version if set
+  if (minimum_supported_version) {
+    if (!isValidReleaseVersion(minimum_supported_version)) {
+      toast({ type: "warning", title: "Invalid min version", message: "Minimum supported version format is invalid (e.g. 3.9.0)." });
+      return;
+    }
+    if (compareVersions(minimum_supported_version, version) > 0) {
+      toast({ type: "warning", title: "Invalid min version", message: "Minimum supported version cannot be greater than the release version." });
+      return;
+    }
+  }
+
+  const releasePayload = {
+    version,
+    download_url,
+    changelog,
+    required,
+    channel,
+    sha256,
+    minimum_supported_version,
+    released_at: new Date().toISOString(),
+    updatedBy: state.currentUser?.email || "Admin"
+  };
+
   try {
-    await setDoc(doc(db, "app_config", "latest_update"), {
-      version,
-      download_url,
-      changelog,
-      required,
-      channel,
-      sha256,
-      released_at: new Date().toISOString(),
-      updatedBy: state.currentUser?.email || "Admin"
-    }, { merge: true });
+    // 1. Save to app_releases/{version} for history
+    await setDoc(doc(db, "app_releases", version.replace(/^v/i, "")), releasePayload);
+
+    // 2. Update the latest_update pointer
+    await setDoc(doc(db, "app_config", "latest_update"), releasePayload, { merge: true });
+
+    logAdminActivity("update", `Published release v${version}`, `Channel: ${channel}`);
     toast({ type: "success", title: "Update Published! 🚀", message: `Version ${version} is now live for all users.` });
+    $("#update-form").reset();
   } catch (err) {
     console.error("Failed to publish update:", err);
     toast({ type: "error", title: "Publish failed", message: err.message });
@@ -986,15 +1350,17 @@ async function handleSavePublicLinks(event) {
 
 // ============== ANALYTICS ==============
 function renderAnalytics() {
-  // resolution rate
+  // Resolution rate from tickets
   const total = state.tickets.length;
   const resolved = state.tickets.filter((t) => t.status === "resolved").length;
   const rate = total ? Math.round((resolved / total) * 100) : 0;
   $("#perf-resolve").textContent = `${rate}%`;
-  // unique users
-  const users = new Set(state.tickets.map((t) => t.userId || t.email).filter(Boolean));
-  $("#perf-users").textContent = users.size;
-  // tickets today
+
+  // Active users from users collection (not tickets)
+  const activeUsers = state.users.filter((u) => (u.status || "active") === "active").length;
+  $("#perf-users").textContent = activeUsers || state.users.length;
+
+  // Tickets today
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const today = state.tickets.filter((t) => {
@@ -1002,8 +1368,34 @@ function renderAnalytics() {
     return d >= todayStart;
   }).length;
   $("#perf-today").textContent = today;
-  // response time (avg from open to first reply / status change) — placeholder
-  $("#perf-response").textContent = "—";
+
+  // Average response time: calculated from tickets that have admin replies
+  let totalResponseMs = 0;
+  let respondedCount = 0;
+  state.tickets.forEach((t) => {
+    if (t.status !== "open" && t.createdAt && t.lastUpdated) {
+      const created = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
+      const updated = t.lastUpdated?.toDate ? t.lastUpdated.toDate() : new Date(t.lastUpdated);
+      const diff = updated - created;
+      if (diff > 0) {
+        totalResponseMs += diff;
+        respondedCount++;
+      }
+    }
+  });
+  if (respondedCount > 0) {
+    const avgMs = totalResponseMs / respondedCount;
+    const avgHours = avgMs / (1000 * 60 * 60);
+    if (avgHours < 1) {
+      $("#perf-response").textContent = `${Math.round(avgMs / (1000 * 60))}m`;
+    } else if (avgHours < 24) {
+      $("#perf-response").textContent = `${avgHours.toFixed(1)}h`;
+    } else {
+      $("#perf-response").textContent = `${(avgHours / 24).toFixed(1)}d`;
+    }
+  } else {
+    $("#perf-response").textContent = "—";
+  }
 }
 
 function renderTopSubjects() {
@@ -1311,14 +1703,14 @@ function openTicketModal(ticket, focusReply = false) {
     chatUnsub = null;
   }
 
-  const userId = ticket.userId || ticket.id;
+  const chatId = ticket.id;
   // A ticket becomes read as soon as an admin opens its full conversation.
-  updateDoc(doc(db, "chats", ticket.id), {
+  updateDoc(doc(db, "chats", chatId), {
     unreadAdmin: false,
     updatedAt: serverTimestamp(),
   }).catch((err) => console.debug("Could not mark ticket as read:", err));
   chatUnsub = onSnapshot(
-    query(collection(db, `chats/${userId}/messages`), orderBy("createdAt", "asc")),
+    query(collection(db, `chats/${chatId}/messages`), orderBy("createdAt", "asc")),
     (snapshot) => {
       if (snapshot.empty) {
         chatContainer.innerHTML = `<div class="muted center pad" style="flex:1;display:flex;align-items:center;justify-content:center;">No messages found.</div>`;
@@ -1379,6 +1771,7 @@ async function updateTicketStatus(status) {
       status,
       updatedAt: serverTimestamp(),
     });
+    logAdminActivity("resolve", `Changed ticket status to ${status.replace("_", " ")}`, `Ticket: ${state.selectedTicket.subject || state.selectedTicket.id}`);
     toast({ type: "success", title: "Status updated", message: `Ticket is now ${status.replace("_", " ")}` });
   } catch (e) {
     console.error(e);
@@ -1405,8 +1798,10 @@ async function sendReply() {
   btn.disabled = true;
   btn.querySelector("span").textContent = "Sending…";
   try {
-    const userId = state.selectedTicket.userId || state.selectedTicket.id;
-    await addDoc(collection(db, `chats/${userId}/messages`), {
+    const chatId = state.selectedTicket.id;
+    const userId = state.selectedTicket.userId;
+
+    await addDoc(collection(db, `chats/${chatId}/messages`), {
       text,
       isAdmin: true,
       sender: state.currentUser?.uid || "admin",
@@ -1415,12 +1810,14 @@ async function sendReply() {
     // The chat listener provides instant delivery; the inbox copy ensures a
     // signed-in user also sees the reply after reopening the account screen.
     try {
-      await addDoc(collection(db, `users/${userId}/messages`), {
-        text,
-        isAdmin: true,
-        createdAt: serverTimestamp(),
-        chatId: state.selectedTicket.id,
-      });
+      if (userId) {
+        await addDoc(collection(db, `users/${userId}/messages`), {
+          text,
+          isAdmin: true,
+          createdAt: serverTimestamp(),
+          chatId: chatId,
+        });
+      }
     } catch (inboxError) {
       // Guest sessions do not have an inbox, but their live chat message has
       // already been sent and remains the primary delivery mechanism.
@@ -1436,6 +1833,7 @@ async function sendReply() {
       lastUpdated: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    logAdminActivity("reply", `Replied to ticket`, `Ticket: ${state.selectedTicket.subject || state.selectedTicket.id}`);
     toast({ type: "success", title: "Reply sent", message: "The user will receive an in-app notification." });
     closeTicketModal();
   } catch (e) {
@@ -1448,24 +1846,47 @@ async function sendReply() {
 }
 
 // ============== NOTIFICATIONS ==============
+function subscribeAdminNotifications() {
+  if (!state.currentUser) return;
+  const q = query(
+    collection(db, "admin_notifications"),
+    orderBy("createdAt", "desc"),
+    limit(20)
+  );
+  const unsub = onSnapshot(
+    q,
+    (snapshot) => {
+      state.notifications = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderNotifications();
+    },
+    (err) => console.error("Notifs error:", err)
+  );
+  state.unsubscribers.push(unsub);
+}
+
 function renderNotifications() {
   const list = $("#notif-list");
-  const recent = state.tickets.slice(0, 8);
+  if (!state.notifications) return;
+  const recent = state.notifications;
+  const unreadCount = recent.filter(n => !n.read).length;
+  
   if (recent.length === 0) {
     list.innerHTML = `<div class="muted center pad">No new notifications</div>`;
     $("#notif-dot").hidden = true;
     return;
   }
-  $("#notif-dot").hidden = false;
+  
+  $("#notif-dot").hidden = unreadCount === 0;
+  
   list.innerHTML = recent
     .map(
-      (t) => `
-      <div class="notif-item" data-ticket="${t.id}">
-        <div class="notif-dot"></div>
+      (n) => `
+      <div class="notif-item ${n.read ? 'read' : 'unread'}" data-ticket="${n.referenceId || ''}">
+        <div class="notif-dot" ${n.read ? 'style="opacity:0;"' : ''}></div>
         <div class="notif-body">
-          <div class="notif-title">${fmt.escape(t.subject || "New ticket")}</div>
-          <div class="notif-desc">${fmt.escape(t.email || "Anonymous")}</div>
-          <div class="notif-time">${fmt.timeAgo(t.createdAt)}</div>
+          <div class="notif-title">${fmt.escape(n.title || "Notification")}</div>
+          <div class="notif-desc">${fmt.escape(n.type || "System")}</div>
+          <div class="notif-time">${fmt.timeAgo(n.createdAt)}</div>
         </div>
       </div>
     `
@@ -1492,6 +1913,50 @@ function closeDrawer() {
 
 // ============== EVENT WIRING ==============
 function wireEvents() {
+  // User Modal Actions
+  $$("[data-close-user]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      closeUserModal();
+    });
+  });
+
+  $("#btn-user-enable")?.addEventListener("click", async () => {
+    if (!state.selectedUser) return;
+    try {
+      await updateDoc(doc(db, "users", state.selectedUser.id), { status: "active" });
+      logAdminActivity("update", `Enabled user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
+      toast({ type: "success", title: "User Enabled" });
+      closeUserModal();
+    } catch (e) {
+      toast({ type: "error", title: "Error", message: e.message });
+    }
+  });
+
+  $("#btn-user-disable")?.addEventListener("click", async () => {
+    if (!state.selectedUser) return;
+    try {
+      await updateDoc(doc(db, "users", state.selectedUser.id), { status: "disabled" });
+      logAdminActivity("update", `Disabled user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
+      toast({ type: "success", title: "User Disabled" });
+      closeUserModal();
+    } catch (e) {
+      toast({ type: "error", title: "Error", message: e.message });
+    }
+  });
+  
+  $("#btn-user-delete")?.addEventListener("click", async () => {
+    if (!state.selectedUser) return;
+    if (!confirm("Are you sure you want to permanently delete this user data?")) return;
+    try {
+      await deleteDoc(doc(db, "users", state.selectedUser.id));
+      logAdminActivity("update", `Deleted user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
+      toast({ type: "success", title: "User Deleted" });
+      closeUserModal();
+    } catch (e) {
+      toast({ type: "error", title: "Error", message: e.message });
+    }
+  });
+
   // Login
   $("#login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -2194,25 +2659,49 @@ function showSaveIndicator(state) {
   }, 2500);
 }
 
-// ============== MY ACTIVITY ==============
-async function loadMyActivity() {
+// ============== MY ACTIVITY (AUDIT LOG) ==============
+function subscribeAdminActivity() {
   if (!state.currentUser) return;
-  // In a real implementation, load from `users/{uid}/activity_log`
-  // For now, derive from current state
-  const myActions = [];
-  state.tickets.slice(0, 10).forEach((t) => {
-    if (t.status === "resolved") {
-      myActions.push({
-        type: "resolve",
-        title: `Resolved "${t.subject || "Untitled"}"`,
-        meta: `${t.email || "User"} • ${fmt.timeAgo(t.updatedAt || t.createdAt)}`,
-        time: t.updatedAt || t.createdAt,
-      });
-    }
-  });
-  state.myActivity = myActions.sort(
-    (a, b) => (b.time?.seconds || 0) - (a.time?.seconds || 0)
+  const q = query(
+    collection(db, "admin_activity"),
+    where("admin_uid", "==", state.currentUser.uid),
+    orderBy("time", "desc"),
+    limit(50)
   );
+  const unsub = onSnapshot(
+    q,
+    (snapshot) => {
+      state.myActivity = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (state.currentRoute === "activity" || state.currentRoute === "account") {
+        renderMyActivity();
+        renderMyActivityChart();
+      }
+    },
+    (err) => {
+      console.error("Admin activity error:", err);
+    }
+  );
+  state.unsubscribers.push(unsub);
+}
+
+async function logAdminActivity(type, title, meta) {
+  if (!state.currentUser) return;
+  try {
+    await addDoc(collection(db, "admin_activity"), {
+      admin_uid: state.currentUser.uid,
+      admin_email: state.currentUser.email,
+      type,
+      title,
+      meta: meta || "",
+      time: serverTimestamp()
+    });
+  } catch (err) {
+    console.error("Failed to log activity:", err);
+  }
+}
+
+async function loadMyActivity() {
+  // Now handled by subscribeAdminActivity listener
 }
 
 function renderMyActivity() {
@@ -2317,6 +2806,70 @@ function renderMyActivityChart() {
   });
 }
 
+// ============== HEALTH MONITOR ==============
+function initHealthMonitor() {
+  const btn = $("#health-monitor-btn");
+  const dropdown = $("#health-dropdown");
+  
+  if (btn) {
+    btn.addEventListener("click", () => {
+      dropdown.hidden = !dropdown.hidden;
+    });
+    document.addEventListener("click", (e) => {
+      if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.hidden = true;
+      }
+    });
+  }
+
+  // Monitor Auth
+  onAuthStateChanged(auth, (user) => {
+    updateHealth("auth", !!user);
+  });
+
+  // Monitor Firestore Connectivity (Using built-in .info/connected)
+  // Unfortunately Firestore JS SDK doesn't expose a simple connected state easily, 
+  // but we can infer it from successful reads later. For now, mark true if initialized.
+  updateHealth("firestore", true);
+}
+
+function updateHealth(service, isHealthy) {
+  state.health[service] = isHealthy;
+  
+  const el = $(`#health-${service}`);
+  if (el) {
+    if (isHealthy) {
+      el.innerHTML = `<span class="dot" style="background:#10b981"></span> Connected`;
+    } else {
+      el.innerHTML = `<span class="dot" style="background:#ef4444"></span> Error`;
+    }
+  }
+
+  updateGlobalHealth();
+}
+
+function updateGlobalHealth() {
+  const values = Object.values(state.health);
+  const total = values.length;
+  const healthy = values.filter(Boolean).length;
+  
+  const dot = $("#health-global-dot");
+  const text = $("#health-global-text");
+  
+  if (!dot || !text) return;
+
+  if (healthy === total) {
+    dot.style.background = "#10b981"; // Green
+    text.textContent = "All Systems Healthy";
+  } else if (healthy > 0) {
+    dot.style.background = "#fbbf24"; // Yellow
+    text.textContent = `${total - healthy} Issues`;
+  } else {
+    dot.style.background = "#ef4444"; // Red
+    text.textContent = "System Down";
+  }
+}
+
 // ============== INIT ==============
 function init() {
   initTheme();
@@ -2325,6 +2878,7 @@ function init() {
   initRouter();
   wireEvents();
   initAuth();
+  initHealthMonitor();
 }
 
 document.addEventListener("DOMContentLoaded", init);

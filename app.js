@@ -17,6 +17,7 @@ import {
   getFirestore,
   collection,
   query,
+  where,
   orderBy,
   limit,
   onSnapshot,

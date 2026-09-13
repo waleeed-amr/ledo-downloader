@@ -661,16 +661,16 @@ function renderUsers() {
         <div class="user-card-info">
           <div class="user-card-name">${fmt.escape(fmt.emailLocal(u.email) || "Anonymous User")}</div>
           <div class="user-card-email">${fmt.escape(u.email || u.id)}</div>
-          ${u.status === "disabled" ? `<div style="color:#ef4444;font-size:11px;margin-top:2px;">Banned</div>` : ""}
+          ${u.banned || u.status === "disabled" ? `<div style="color:#ef4444;font-size:11px;margin-top:2px;">Banned: ${fmt.escape(u.banReason || 'No reason')}</div>` : ""}
         </div>
         <div class="user-card-stats">
           <div class="user-stat">
             <div class="user-stat-label">Tickets</div>
-            <div class="user-stat-value">${u.ticketsCount || 0}</div>
+            <div class="user-stat-value">${u.ticketsCount !== undefined ? u.ticketsCount : 'N/A'}</div>
           </div>
           <div class="user-stat">
             <div class="user-stat-label">Last seen</div>
-            <div class="user-stat-value" style="font-size:13px">${fmt.timeAgo(u.lastSeen || u.createdAt)}</div>
+            <div class="user-stat-value" style="font-size:13px">${u.lastSeen ? fmt.timeAgo(u.lastSeen) : 'N/A'}</div>
           </div>
         </div>
       </div>
@@ -693,16 +693,17 @@ function openUserModal(user) {
   
   $("#modal-user-name").textContent = fmt.emailLocal(user.email) || "Anonymous User";
   $("#modal-user-email").textContent = user.email || "—";
-  $("#modal-user-created").textContent = fmt.date(user.createdAt);
-  $("#modal-user-lastseen").textContent = fmt.timeAgo(user.lastSeen || user.createdAt);
+  $("#modal-user-created").textContent = user.createdAt ? fmt.date(user.createdAt) : "—";
+  $("#modal-user-lastseen").textContent = user.lastSeen ? fmt.timeAgo(user.lastSeen) : "N/A";
   $("#modal-user-id").textContent = user.id || "—";
   
-  $("#modal-user-tickets-count").textContent = user.ticketsCount || 0;
-  $("#modal-user-crashes-count").textContent = state.crashes.filter(c => c.email === user.email || c.device_id === user.id).length || 0;
+  $("#modal-user-tickets-count").textContent = user.ticketsCount !== undefined ? user.ticketsCount : "N/A";
+  // Crashes aren't on user doc usually, compute explicitly if missing
+  $("#modal-user-crashes-count").textContent = user.crashesCount !== undefined ? user.crashesCount : state.crashes.filter(c => c.email === user.email || c.device_id === user.id).length || 0;
   $("#modal-user-version").textContent = user.appVersion || "—";
   
   const statusPill = $("#modal-user-status-pill");
-  if (user.status === "disabled") {
+  if (user.banned || user.status === "disabled") {
     statusPill.textContent = "Banned";
     statusPill.className = "status-pill sm disabled";
     statusPill.style.color = "#ef4444";
@@ -1962,8 +1963,12 @@ function wireEvents() {
     });
   });
 
-  $("#btn-user-enable")?.addEventListener("click", async () => {
+  $("#btn-user-enable")?.addEventListener("click", async (e) => {
     if (!state.selectedUser) return;
+    const btn = e.currentTarget;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="lucide-loader" style="animation: spin 1s linear infinite;"></i> Enabling...';
+    btn.disabled = true;
     try {
       const payload = {
         status: "active",
@@ -1976,15 +1981,24 @@ function wireEvents() {
       logAdminActivity("update", `Enabled user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
       toast({ type: "success", title: "User Enabled" });
       closeUserModal();
-    } catch (e) {
-      toast({ type: "error", title: "Error", message: e.message });
+    } catch (err) {
+      toast({ type: "error", title: "Error", message: err.message });
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+      refreshIcons();
     }
   });
 
-  $("#btn-user-disable")?.addEventListener("click", async () => {
+  $("#btn-user-disable")?.addEventListener("click", async (e) => {
     if (!state.selectedUser) return;
     const reason = prompt("Enter reason for banning this user:");
     if (reason === null) return; // User cancelled
+    
+    const btn = e.currentTarget;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="lucide-loader" style="animation: spin 1s linear infinite;"></i> Banning...';
+    btn.disabled = true;
     
     try {
       const payload = {
@@ -1998,14 +2012,24 @@ function wireEvents() {
       logAdminActivity("update", `Disabled user ${state.selectedUser.email || state.selectedUser.id}`, `Reason: ${payload.banReason}`);
       toast({ type: "success", title: "User Disabled" });
       closeUserModal();
-    } catch (e) {
-      toast({ type: "error", title: "Error", message: e.message });
+    } catch (err) {
+      toast({ type: "error", title: "Error", message: err.message });
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+      refreshIcons();
     }
   });
   
-  $("#btn-user-delete")?.addEventListener("click", async () => {
+  $("#btn-user-delete")?.addEventListener("click", async (e) => {
     if (!state.selectedUser) return;
     if (!confirm("Are you sure you want to permanently delete this user data?")) return;
+    
+    const btn = e.currentTarget;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="lucide-loader" style="animation: spin 1s linear infinite;"></i> Deleting...';
+    btn.disabled = true;
+    
     try {
       // We will also mark it as deleted so the backend function can pick it up and delete from Auth.
       await updateDoc(doc(db, "users", state.selectedUser.id), { deleted: true, deletedAt: new Date().toISOString() });
@@ -2013,8 +2037,12 @@ function wireEvents() {
       logAdminActivity("update", `Deleted user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
       toast({ type: "success", title: "User Deleted" });
       closeUserModal();
-    } catch (e) {
-      toast({ type: "error", title: "Error", message: e.message });
+    } catch (err) {
+      toast({ type: "error", title: "Error", message: err.message });
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+      refreshIcons();
     }
   });
 

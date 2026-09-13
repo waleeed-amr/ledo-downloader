@@ -1965,7 +1965,14 @@ function wireEvents() {
   $("#btn-user-enable")?.addEventListener("click", async () => {
     if (!state.selectedUser) return;
     try {
-      await updateDoc(doc(db, "users", state.selectedUser.id), { status: "active" });
+      const payload = {
+        status: "active",
+        banned: false,
+        banReason: null,
+        unbannedAt: new Date().toISOString(),
+        unbannedBy: state.currentUser?.email || state.currentUser?.uid || "admin"
+      };
+      await updateDoc(doc(db, "users", state.selectedUser.id), payload);
       logAdminActivity("update", `Enabled user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
       toast({ type: "success", title: "User Enabled" });
       closeUserModal();
@@ -1976,9 +1983,19 @@ function wireEvents() {
 
   $("#btn-user-disable")?.addEventListener("click", async () => {
     if (!state.selectedUser) return;
+    const reason = prompt("Enter reason for banning this user:");
+    if (reason === null) return; // User cancelled
+    
     try {
-      await updateDoc(doc(db, "users", state.selectedUser.id), { status: "disabled" });
-      logAdminActivity("update", `Disabled user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
+      const payload = {
+        status: "disabled",
+        banned: true,
+        banReason: reason || "No reason provided",
+        bannedAt: new Date().toISOString(),
+        bannedBy: state.currentUser?.email || state.currentUser?.uid || "admin"
+      };
+      await updateDoc(doc(db, "users", state.selectedUser.id), payload);
+      logAdminActivity("update", `Disabled user ${state.selectedUser.email || state.selectedUser.id}`, `Reason: ${payload.banReason}`);
       toast({ type: "success", title: "User Disabled" });
       closeUserModal();
     } catch (e) {
@@ -1990,6 +2007,8 @@ function wireEvents() {
     if (!state.selectedUser) return;
     if (!confirm("Are you sure you want to permanently delete this user data?")) return;
     try {
+      // We will also mark it as deleted so the backend function can pick it up and delete from Auth.
+      await updateDoc(doc(db, "users", state.selectedUser.id), { deleted: true, deletedAt: new Date().toISOString() });
       await deleteDoc(doc(db, "users", state.selectedUser.id));
       logAdminActivity("update", `Deleted user ${state.selectedUser.email || state.selectedUser.id}`, `User ID: ${state.selectedUser.id}`);
       toast({ type: "success", title: "User Deleted" });

@@ -2247,11 +2247,11 @@ function renderAccountHero() {
   else if (ua.includes("Safari")) browser = "Safari";
   else if (ua.includes("Edge")) browser = "Edge";
   const os = ua.includes("Win") ? "Windows" : ua.includes("Mac") ? "macOS" : ua.includes("Linux") ? "Linux" : "Device";
-  $("#sess-browser").textContent = `${browser} on ${os}`;
+  if ($("#sess-browser")) $("#sess-browser").textContent = `${browser} on ${os}`;
   // location fallback
   const lang = (navigator.language || "en").split("-")[1] || "";
-  $("#sess-location").textContent = lang ? `${lang.toUpperCase()} (approx)` : "Detecting…";
-  $("#account-location").textContent = $("#account-location").textContent || "Earth";
+  if ($("#sess-location")) $("#sess-location").textContent = lang ? `${lang.toUpperCase()} (approx)` : "Detecting…";
+  if ($("#account-location")) $("#account-location").textContent = $("#account-location").textContent || "Earth";
 }
 
 function wireAccountTabs() {

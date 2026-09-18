@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-    getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+    getAuth, signInWithEmailAndPassword,
     sendPasswordResetEmail, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
@@ -31,15 +31,11 @@ const dashboardView = document.getElementById('dashboard-view');
 const authForm = document.getElementById('auth-form');
 const loginUsername = document.getElementById('login-username');
 const loginPassword = document.getElementById('login-password');
-const confirmPasswordGroup = document.getElementById('confirm-password-group');
-const confirmPassword = document.getElementById('confirm-password');
 const authError = document.getElementById('auth-error');
 const authSuccess = document.getElementById('auth-success');
 const btnSubmitText = document.getElementById('btn-submit-text');
 const btnSignIn = document.getElementById('btn-signin');
 const btnForgotPassword = document.getElementById('btn-forgot-password');
-const tabLogin = document.getElementById('tab-login');
-const tabRegister = document.getElementById('tab-register');
 const authSubtitle = document.getElementById('auth-subtitle');
 const adminEmailDisplay = document.getElementById('admin-email-display');
 const btnSignOut = document.getElementById('btn-signout');
@@ -47,40 +43,70 @@ const btnSignOut = document.getElementById('btn-signout');
 const navItems = document.querySelectorAll('.nav-item');
 const panels = document.querySelectorAll('.panel');
 
-let authMode = 'login'; // 'login' or 'register'
+let cachedUsers = [];
 
-// Tab switching
-if (tabLogin && tabRegister) {
-    tabLogin.addEventListener('click', () => {
-        authMode = 'login';
-        tabLogin.style.background = '#ffffff';
-        tabLogin.style.color = '#000000';
-        tabLogin.classList.remove('outline');
-        tabRegister.style.background = 'transparent';
-        tabRegister.style.color = '#a1a1aa';
-        tabRegister.classList.add('outline');
-        confirmPasswordGroup.classList.add('hidden');
-        btnSubmitText.textContent = 'دخول';
-        authSubtitle.textContent = 'سجل الدخول بحساب المسؤول للوصول للوحة التحكم';
-        authError.textContent = '';
-        authSuccess.style.display = 'none';
-    });
+// ─── SIDEBAR NAVIGATION ───
+navItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetId = item.dataset.target;
+        if (!targetId) return;
 
-    tabRegister.addEventListener('click', () => {
-        authMode = 'register';
-        tabRegister.style.background = '#ffffff';
-        tabRegister.style.color = '#000000';
-        tabRegister.classList.remove('outline');
-        tabLogin.style.background = 'transparent';
-        tabLogin.style.color = '#a1a1aa';
-        tabLogin.classList.add('outline');
-        confirmPasswordGroup.classList.remove('hidden');
-        btnSubmitText.textContent = 'إنشاء الحساب ودخول لوحة التحكم';
-        authSubtitle.textContent = 'أنشئ حساب مسؤول جديد للتحكم بالتطبيق والمستخدمين';
-        authError.textContent = '';
-        authSuccess.style.display = 'none';
+        // Update active nav item
+        navItems.forEach(n => n.classList.remove('active'));
+        item.classList.add('active');
+
+        // Show target panel, hide others
+        panels.forEach(p => {
+            if (p.id === targetId) {
+                p.classList.remove('hidden');
+                p.classList.add('active');
+            } else {
+                p.classList.add('hidden');
+                p.classList.remove('active');
+            }
+        });
+
+        // Update URL hash
+        window.location.hash = targetId;
+
+        // Load data for the target panel
+        switch (targetId) {
+            case 'panel-overview':
+                loadOverviewStats();
+                break;
+            case 'panel-users':
+                loadUsers();
+                break;
+            case 'panel-notifications':
+                populateUserDropdown();
+                break;
+            case 'panel-chats':
+                loadChats();
+                break;
+            case 'panel-crashes':
+                loadCrashes();
+                break;
+            case 'panel-config':
+                loadAppConfig();
+                break;
+        }
     });
+});
+
+// Handle URL hash on page load
+function navigateToHash() {
+    const hash = window.location.hash.replace('#', '');
+    if (hash) {
+        const targetNav = document.querySelector(`.nav-item[data-target="${hash}"]`);
+        if (targetNav) {
+            targetNav.click();
+            return;
+        }
+    }
 }
+
+// Registration removed — admin accounts are created only from the database
 
 function resolveEmail(input) {
     const clean = input.trim().toLowerCase();
@@ -98,6 +124,8 @@ onAuthStateChanged(auth, (user) => {
         const displayName = user.email ? user.email.replace(VIRTUAL_DOMAIN, '') : (user.displayName || 'admin');
         adminEmailDisplay.textContent = displayName;
         loadOverviewStats();
+        // Navigate to hash if present
+        navigateToHash();
     } else {
         authView.classList.remove('hidden');
         dashboardView.classList.add('hidden');
@@ -124,43 +152,7 @@ authForm.addEventListener('submit', async (e) => {
     btnSubmitText.textContent = 'جارِ التحقق...';
 
     try {
-        if (authMode === 'login') {
-            await signInWithEmailAndPassword(auth, email, password);
-        } else {
-            // Register mode
-            const confirmPwd = confirmPassword.value;
-            if (password !== confirmPwd) {
-                authError.textContent = 'كلمتا المرور غير متطابقتين';
-                btnSignIn.disabled = false;
-                btnSubmitText.textContent = origBtnText;
-                return;
-            }
-            if (password.length < 6) {
-                authError.textContent = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-                btnSignIn.disabled = false;
-                btnSubmitText.textContent = origBtnText;
-                return;
-            }
-
-            const cred = await createUserWithEmailAndPassword(auth, email, password);
-            // Save admin role in Firestore
-            try {
-                await setDoc(doc(db, "users", cred.user.uid), {
-                    username: inputVal.includes('@') ? inputVal.split('@')[0] : inputVal,
-                    email: email,
-                    role: "admin",
-                    createdAt: new Date().toISOString()
-                }, { merge: true });
-
-                await setDoc(doc(db, "admins", cred.user.uid), {
-                    email: email,
-                    role: "admin",
-                    createdAt: new Date().toISOString()
-                }, { merge: true });
-            } catch (err) {
-                console.warn("Could not write admin doc:", err);
-            }
-        }
+        await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
         authError.textContent = getAuthErrorMsg(err, email);
     } finally {
@@ -185,7 +177,7 @@ if (btnForgotPassword) {
         const email = resolveEmail(inputVal);
 
         if (email.endsWith(VIRTUAL_DOMAIN)) {
-            authError.textContent = `حساب (@ledodown.local) ليس له بريد إلكتروني خارجي. إذا نسيت كلمة المرور، يمكنك الضغط على "إنشاء حساب مسؤول" بالأعلى لإنشاء حساب مسؤول جديد فوراً!`;
+            authError.textContent = 'حساب (@ledodown.local) ليس له بريد إلكتروني خارجي. تواصل مع مسؤول النظام لإعادة تعيين كلمة المرور.';
             return;
         }
 
@@ -204,16 +196,10 @@ btnSignOut.addEventListener('click', () => signOut(auth));
 function getAuthErrorMsg(err, attemptedEmail) {
     const code = err.code || '';
     if (code.includes('user-not-found')) {
-        return `المستخدم غير موجود. يمكنك إنشاء حساب جديد عبر الضغط على "إنشاء حساب مسؤول" أعلاه.`;
+        return 'المستخدم غير موجود. تواصل مع مسؤول النظام لإنشاء حساب.';
     }
     if (code.includes('wrong-password') || code.includes('invalid-credential')) {
         return 'بيانات الدخول غير صحيحة (تأكد من اسم المستخدم وكلمة المرور).';
-    }
-    if (code.includes('email-already-in-use')) {
-        return 'هذا المستخدم أو البريد مسجل بالفعل. اضغط "تسجيل الدخول" للدخول.';
-    }
-    if (code.includes('weak-password')) {
-        return 'كلمة المرور ضعيفة (يجب ألا تقل عن 6 أحرف).';
     }
     if (code.includes('too-many-requests')) {
         return 'تم حظر المحاولات مؤقتاً لكثرة المحاولات الخاطئة. انتظر دقيقة وحاول لاحقاً.';
@@ -233,10 +219,10 @@ async function loadOverviewStats() {
             getDocs(collection(db, "chats")),
             getDocs(collection(db, "heartbeats")),
         ]);
-        statUsers.textContent = usersSnap.size;
-        statCrashes.textContent = crashesSnap.size;
-        statChats.textContent = chatsSnap.size;
-        statHeartbeats.textContent = heartbeatsSnap.size;
+        document.getElementById('stat-users').textContent = usersSnap.size;
+        document.getElementById('stat-crashes').textContent = crashesSnap.size;
+        document.getElementById('stat-chats').textContent = chatsSnap.size;
+        document.getElementById('stat-heartbeats').textContent = heartbeatsSnap.size;
     } catch (e) {
         console.error("Stats error:", e);
     }
@@ -245,6 +231,7 @@ async function loadOverviewStats() {
 // ─── USERS ───
 async function loadUsers() {
     const tbody = document.getElementById('users-table-body');
+    if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="4" class="empty-state">جارِ التحميل...</td></tr>';
     try {
         const snap = await getDocs(collection(db, "users"));

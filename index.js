@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
-    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+    sendPasswordResetEmail, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
     getFirestore, collection, getDocs, addDoc, doc, setDoc, getDoc,
@@ -30,47 +31,71 @@ const dashboardView = document.getElementById('dashboard-view');
 const authForm = document.getElementById('auth-form');
 const loginUsername = document.getElementById('login-username');
 const loginPassword = document.getElementById('login-password');
+const confirmPasswordGroup = document.getElementById('confirm-password-group');
+const confirmPassword = document.getElementById('confirm-password');
 const authError = document.getElementById('auth-error');
+const authSuccess = document.getElementById('auth-success');
+const btnSubmitText = document.getElementById('btn-submit-text');
+const btnSignIn = document.getElementById('btn-signin');
+const btnForgotPassword = document.getElementById('btn-forgot-password');
+const tabLogin = document.getElementById('tab-login');
+const tabRegister = document.getElementById('tab-register');
+const authSubtitle = document.getElementById('auth-subtitle');
 const adminEmailDisplay = document.getElementById('admin-email-display');
 const btnSignOut = document.getElementById('btn-signout');
 
 const navItems = document.querySelectorAll('.nav-item');
 const panels = document.querySelectorAll('.panel');
 
-// Stats
-const statUsers = document.getElementById('stat-users');
-const statCrashes = document.getElementById('stat-crashes');
-const statChats = document.getElementById('stat-chats');
-const statHeartbeats = document.getElementById('stat-heartbeats');
+let authMode = 'login'; // 'login' or 'register'
 
-// ─── Cached user list for notifications dropdown ───
-let cachedUsers = [];
-
-// ─── NAVIGATION ───
-navItems.forEach(item => {
-    item.addEventListener('click', (e) => {
-        e.preventDefault();
-        const targetId = item.dataset.target;
-        navItems.forEach(n => n.classList.remove('active'));
-        item.classList.add('active');
-        panels.forEach(p => {
-            p.classList.toggle('hidden', p.id !== targetId);
-            p.classList.toggle('active', p.id === targetId);
-        });
-        if (targetId === 'panel-users') loadUsers();
-        if (targetId === 'panel-crashes') loadCrashes();
-        if (targetId === 'panel-chats') loadChats();
-        if (targetId === 'panel-config') loadAppConfig();
-        if (targetId === 'panel-notifications') populateUserDropdown();
+// Tab switching
+if (tabLogin && tabRegister) {
+    tabLogin.addEventListener('click', () => {
+        authMode = 'login';
+        tabLogin.style.background = '#ffffff';
+        tabLogin.style.color = '#000000';
+        tabLogin.classList.remove('outline');
+        tabRegister.style.background = 'transparent';
+        tabRegister.style.color = '#a1a1aa';
+        tabRegister.classList.add('outline');
+        confirmPasswordGroup.classList.add('hidden');
+        btnSubmitText.textContent = 'دخول';
+        authSubtitle.textContent = 'سجل الدخول بحساب المسؤول للوصول للوحة التحكم';
+        authError.textContent = '';
+        authSuccess.style.display = 'none';
     });
-});
+
+    tabRegister.addEventListener('click', () => {
+        authMode = 'register';
+        tabRegister.style.background = '#ffffff';
+        tabRegister.style.color = '#000000';
+        tabRegister.classList.remove('outline');
+        tabLogin.style.background = 'transparent';
+        tabLogin.style.color = '#a1a1aa';
+        tabLogin.classList.add('outline');
+        confirmPasswordGroup.classList.remove('hidden');
+        btnSubmitText.textContent = 'إنشاء الحساب ودخول لوحة التحكم';
+        authSubtitle.textContent = 'أنشئ حساب مسؤول جديد للتحكم بالتطبيق والمستخدمين';
+        authError.textContent = '';
+        authSuccess.style.display = 'none';
+    });
+}
+
+function resolveEmail(input) {
+    const clean = input.trim().toLowerCase();
+    if (clean.includes('@')) {
+        return clean;
+    }
+    return clean + VIRTUAL_DOMAIN;
+}
 
 // ─── AUTH ───
 onAuthStateChanged(auth, (user) => {
     if (user) {
         authView.classList.add('hidden');
         dashboardView.classList.remove('hidden');
-        const displayName = user.email ? user.email.replace(VIRTUAL_DOMAIN, '') : 'admin';
+        const displayName = user.email ? user.email.replace(VIRTUAL_DOMAIN, '') : (user.displayName || 'admin');
         adminEmailDisplay.textContent = displayName;
         loadOverviewStats();
     } else {
@@ -82,25 +107,121 @@ onAuthStateChanged(auth, (user) => {
 authForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     authError.textContent = '';
-    const username = loginUsername.value.trim();
+    authSuccess.style.display = 'none';
+
+    const inputVal = loginUsername.value.trim();
     const password = loginPassword.value;
-    if (!username || !password) return;
+
+    if (!inputVal || !password) {
+        authError.textContent = 'يرجى إدخال اسم المستخدم/البريد وكلمة المرور';
+        return;
+    }
+
+    const email = resolveEmail(inputVal);
+
+    btnSignIn.disabled = true;
+    const origBtnText = btnSubmitText.textContent;
+    btnSubmitText.textContent = 'جارِ التحقق...';
+
     try {
-        const email = username.toLowerCase() + VIRTUAL_DOMAIN;
-        await signInWithEmailAndPassword(auth, email, password);
+        if (authMode === 'login') {
+            await signInWithEmailAndPassword(auth, email, password);
+        } else {
+            // Register mode
+            const confirmPwd = confirmPassword.value;
+            if (password !== confirmPwd) {
+                authError.textContent = 'كلمتا المرور غير متطابقتين';
+                btnSignIn.disabled = false;
+                btnSubmitText.textContent = origBtnText;
+                return;
+            }
+            if (password.length < 6) {
+                authError.textContent = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                btnSignIn.disabled = false;
+                btnSubmitText.textContent = origBtnText;
+                return;
+            }
+
+            const cred = await createUserWithEmailAndPassword(auth, email, password);
+            // Save admin role in Firestore
+            try {
+                await setDoc(doc(db, "users", cred.user.uid), {
+                    username: inputVal.includes('@') ? inputVal.split('@')[0] : inputVal,
+                    email: email,
+                    role: "admin",
+                    createdAt: new Date().toISOString()
+                }, { merge: true });
+
+                await setDoc(doc(db, "admins", cred.user.uid), {
+                    email: email,
+                    role: "admin",
+                    createdAt: new Date().toISOString()
+                }, { merge: true });
+            } catch (err) {
+                console.warn("Could not write admin doc:", err);
+            }
+        }
     } catch (err) {
-        authError.textContent = getAuthErrorMsg(err);
+        authError.textContent = getAuthErrorMsg(err, email);
+    } finally {
+        btnSignIn.disabled = false;
+        btnSubmitText.textContent = origBtnText;
     }
 });
 
+// Forgot Password
+if (btnForgotPassword) {
+    btnForgotPassword.addEventListener('click', async (e) => {
+        e.preventDefault();
+        authError.textContent = '';
+        authSuccess.style.display = 'none';
+
+        const inputVal = loginUsername.value.trim();
+        if (!inputVal) {
+            authError.textContent = 'اكتب اسم المستخدم أو البريد الإلكتروني أولاً في الحقل أعلاه';
+            return;
+        }
+
+        const email = resolveEmail(inputVal);
+
+        if (email.endsWith(VIRTUAL_DOMAIN)) {
+            authError.textContent = `حساب (@ledodown.local) ليس له بريد إلكتروني خارجي. إذا نسيت كلمة المرور، يمكنك الضغط على "إنشاء حساب مسؤول" بالأعلى لإنشاء حساب مسؤول جديد فوراً!`;
+            return;
+        }
+
+        try {
+            await sendPasswordResetEmail(auth, email);
+            authSuccess.textContent = `تم إرسال رابط إعادة تعيين كلمة المرور إلى: ${email}`;
+            authSuccess.style.display = 'block';
+        } catch (err) {
+            authError.textContent = getAuthErrorMsg(err, email);
+        }
+    });
+}
+
 btnSignOut.addEventListener('click', () => signOut(auth));
 
-function getAuthErrorMsg(err) {
+function getAuthErrorMsg(err, attemptedEmail) {
     const code = err.code || '';
-    if (code.includes('user-not-found')) return 'اسم المستخدم غير موجود';
-    if (code.includes('wrong-password') || code.includes('invalid-credential')) return 'كلمة المرور غير صحيحة';
-    if (code.includes('too-many-requests')) return 'محاولات كثيرة. حاول لاحقاً';
-    return err.message;
+    if (code.includes('user-not-found')) {
+        return `المستخدم غير موجود. يمكنك إنشاء حساب جديد عبر الضغط على "إنشاء حساب مسؤول" أعلاه.`;
+    }
+    if (code.includes('wrong-password') || code.includes('invalid-credential')) {
+        return 'بيانات الدخول غير صحيحة (تأكد من اسم المستخدم وكلمة المرور).';
+    }
+    if (code.includes('email-already-in-use')) {
+        return 'هذا المستخدم أو البريد مسجل بالفعل. اضغط "تسجيل الدخول" للدخول.';
+    }
+    if (code.includes('weak-password')) {
+        return 'كلمة المرور ضعيفة (يجب ألا تقل عن 6 أحرف).';
+    }
+    if (code.includes('too-many-requests')) {
+        return 'تم حظر المحاولات مؤقتاً لكثرة المحاولات الخاطئة. انتظر دقيقة وحاول لاحقاً.';
+    }
+    if (code.includes('invalid-email')) {
+        return 'صيغة البريد الإلكتروني غير صالحة.';
+    }
+    return err.message || 'حدث خطأ أثناء المصادقة.';
 }
 
 // ─── OVERVIEW STATS ───

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ledo Admin Dashboard</title>
     <meta name="description" content="Ledo Downloader Admin Dashboard - Manage users, notifications, and app configuration.">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='56' font-family='system-ui,sans-serif' font-weight='800' fill='%23ffffff' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
@@ -17,22 +18,37 @@
             <div class="auth-header">
                 <div class="logo-mark">L</div>
                 <h2>Ledo Admin</h2>
-                <p>سجل الدخول بحساب المسؤول</p>
+                <p id="auth-subtitle">سجل الدخول بحساب المسؤول للوصول للوحة التحكم</p>
             </div>
+
+            <!-- Auth Mode Switcher -->
+            <div class="auth-tabs" style="display: flex; gap: 8px; margin-bottom: 20px; background: #18181b; padding: 4px; border-radius: 8px;">
+                <button type="button" id="tab-login" class="btn btn-sm" style="flex: 1; background: #ffffff; color: #000000; border: none; font-weight: 600;">تسجيل الدخول</button>
+                <button type="button" id="tab-register" class="btn btn-sm outline" style="flex: 1; border: none; color: #a1a1aa;">إنشاء حساب مسؤول</button>
+            </div>
+
             <form id="auth-form">
                 <div class="input-group">
-                    <label for="login-username">اسم المستخدم</label>
-                    <input type="text" id="login-username" required placeholder="waleed">
+                    <label for="login-username" id="label-username">اسم المستخدم أو البريد الإلكتروني</label>
+                    <input type="text" id="login-username" required placeholder="waleed أو admin@... أو بريدك">
                 </div>
                 <div class="input-group">
                     <label for="login-password">كلمة المرور</label>
                     <input type="password" id="login-password" required placeholder="••••••••">
                 </div>
+                <div id="confirm-password-group" class="input-group hidden">
+                    <label for="confirm-password">تأكيد كلمة المرور</label>
+                    <input type="password" id="confirm-password" placeholder="••••••••">
+                </div>
                 <button type="submit" id="btn-signin" class="btn primary full-width">
-                    <i class='bx bx-lock-open-alt'></i> دخول
+                    <i class='bx bx-lock-open-alt'></i> <span id="btn-submit-text">دخول</span>
                 </button>
+                <div style="margin-top: 12px; text-align: center;">
+                    <a href="#" id="btn-forgot-password" style="color: #a1a1aa; font-size: 13px; text-decoration: none;">نسيت كلمة المرور؟</a>
+                </div>
             </form>
-            <div id="auth-error" class="error-text"></div>
+            <div id="auth-error" class="error-text mt-1"></div>
+            <div id="auth-success" class="status-text mt-1" style="color: #10b981; display: none;"></div>
         </div>
     </div>
 

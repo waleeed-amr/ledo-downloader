@@ -45,65 +45,79 @@ const panels = document.querySelectorAll('.panel');
 
 let cachedUsers = [];
 
-// ─── SIDEBAR NAVIGATION ───
+// ─── SIDEBAR NAVIGATION & TAB SWITCHING ───
+export function switchTab(targetId) {
+    if (!targetId) targetId = 'panel-overview';
+    targetId = targetId.replace(/^#/, '');
+
+    const targetPanel = document.getElementById(targetId);
+    if (!targetPanel) return;
+
+    // Update active nav item
+    navItems.forEach(n => {
+        const isMatch = n.dataset.target === targetId || n.getAttribute('href') === `#${targetId}`;
+        n.classList.toggle('active', isMatch);
+    });
+
+    // Show target panel, hide others
+    panels.forEach(p => {
+        const isMatch = (p.id === targetId);
+        p.classList.toggle('hidden', !isMatch);
+        p.classList.toggle('active', isMatch);
+    });
+
+    // Update URL hash safely without scrolling
+    if (window.location.hash !== `#${targetId}`) {
+        history.replaceState(null, '', `#${targetId}`);
+    }
+
+    // Load data for the target panel
+    switch (targetId) {
+        case 'panel-overview':
+            loadOverviewStats();
+            break;
+        case 'panel-users':
+            loadUsers();
+            break;
+        case 'panel-notifications':
+            populateUserDropdown();
+            break;
+        case 'panel-chats':
+            loadChats();
+            break;
+        case 'panel-crashes':
+            loadCrashes();
+            break;
+        case 'panel-config':
+            loadAppConfig();
+            break;
+    }
+}
+
+// Expose globally for inline onclick fallback
+window.switchTab = switchTab;
+
+// Attach click listeners to nav items
 navItems.forEach(item => {
     item.addEventListener('click', (e) => {
         e.preventDefault();
-        const targetId = item.dataset.target;
-        if (!targetId) return;
-
-        // Update active nav item
-        navItems.forEach(n => n.classList.remove('active'));
-        item.classList.add('active');
-
-        // Show target panel, hide others
-        panels.forEach(p => {
-            if (p.id === targetId) {
-                p.classList.remove('hidden');
-                p.classList.add('active');
-            } else {
-                p.classList.add('hidden');
-                p.classList.remove('active');
-            }
-        });
-
-        // Update URL hash
-        window.location.hash = targetId;
-
-        // Load data for the target panel
-        switch (targetId) {
-            case 'panel-overview':
-                loadOverviewStats();
-                break;
-            case 'panel-users':
-                loadUsers();
-                break;
-            case 'panel-notifications':
-                populateUserDropdown();
-                break;
-            case 'panel-chats':
-                loadChats();
-                break;
-            case 'panel-crashes':
-                loadCrashes();
-                break;
-            case 'panel-config':
-                loadAppConfig();
-                break;
-        }
+        const targetId = item.dataset.target || (item.getAttribute('href') ? item.getAttribute('href').replace('#', '') : '');
+        switchTab(targetId);
     });
 });
 
-// Handle URL hash on page load
-function navigateToHash() {
+// React to browser back/forward or hash changes
+window.addEventListener('hashchange', () => {
     const hash = window.location.hash.replace('#', '');
     if (hash) {
-        const targetNav = document.querySelector(`.nav-item[data-target="${hash}"]`);
-        if (targetNav) {
-            targetNav.click();
-            return;
-        }
+        switchTab(hash);
     }
+});
+
+// Handle URL hash on initial page load
+function navigateToHash() {
+    const hash = window.location.hash.replace('#', '');
+    switchTab(hash || 'panel-overview');
 }
 
 // Registration removed — admin accounts are created only from the database
@@ -212,20 +226,24 @@ function getAuthErrorMsg(err, attemptedEmail) {
 
 // ─── OVERVIEW STATS ───
 async function loadOverviewStats() {
-    try {
-        const [usersSnap, crashesSnap, chatsSnap, heartbeatsSnap] = await Promise.all([
-            getDocs(collection(db, "users")),
-            getDocs(collection(db, "crash_reports")),
-            getDocs(collection(db, "chats")),
-            getDocs(collection(db, "heartbeats")),
-        ]);
-        document.getElementById('stat-users').textContent = usersSnap.size;
-        document.getElementById('stat-crashes').textContent = crashesSnap.size;
-        document.getElementById('stat-chats').textContent = chatsSnap.size;
-        document.getElementById('stat-heartbeats').textContent = heartbeatsSnap.size;
-    } catch (e) {
-        console.error("Stats error:", e);
-    }
+    const fetchCount = async (collName, elId) => {
+        try {
+            const snap = await getDocs(collection(db, collName));
+            const el = document.getElementById(elId);
+            if (el) el.textContent = snap.size;
+        } catch (e) {
+            console.warn(`[Stats] Could not count ${collName}:`, e);
+            const el = document.getElementById(elId);
+            if (el) el.textContent = '0';
+        }
+    };
+
+    await Promise.allSettled([
+        fetchCount("users", "stat-users"),
+        fetchCount("crash_reports", "stat-crashes"),
+        fetchCount("chats", "stat-chats"),
+        fetchCount("heartbeats", "stat-heartbeats"),
+    ]);
 }
 
 // ─── USERS ───
@@ -254,7 +272,7 @@ async function loadUsers() {
             tr.innerHTML = `
                 <td>${escapeHtml(username)}</td>
                 <td>${avatarHtml}</td>
-                <td>${data.createdAt ? new Date(data.createdAt).toLocaleDateString('ar-EG') : '—'}</td>
+                <td>${formatDate(data.createdAt)}</td>
                 <td>
                     <button class="btn outline btn-sm btn-msg-user" data-uid="${uid}" data-name="${escapeHtml(username)}">
                         <i class='bx bx-envelope'></i> رسالة
@@ -495,7 +513,7 @@ function openChat(uid, displayName) {
             const isAdmin = msg.isAdmin === true;
             const bubble = document.createElement('div');
             bubble.className = `chat-bubble ${isAdmin ? 'admin' : 'user'}`;
-            const time = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleString('ar-EG') : '';
+            const time = msg.createdAt ? formatDate(msg.createdAt) : '';
             bubble.innerHTML = `
                 <div>${escapeHtml(msg.text || '')}</div>
                 <div class="bubble-time">${time}</div>
@@ -559,7 +577,7 @@ async function loadCrashes() {
             const data = docSnap.data();
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${data.createdAt ? new Date(data.createdAt).toLocaleString('ar-EG') : '—'}</td>
+                <td>${formatDate(data.createdAt)}</td>
                 <td title="${escapeHtml(data.message || '')}">${escapeHtml((data.message || '').slice(0, 80))}</td>
                 <td>${escapeHtml(data.error_category || data.category || '—')}</td>
                 <td>
@@ -659,4 +677,12 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
     return div.innerHTML;
+}
+
+function formatDate(val) {
+    if (!val) return '—';
+    if (typeof val.toDate === 'function') return val.toDate().toLocaleString('ar-EG');
+    if (val.seconds) return new Date(val.seconds * 1000).toLocaleString('ar-EG');
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString('ar-EG');
 }

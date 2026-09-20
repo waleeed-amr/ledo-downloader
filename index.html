@@ -291,16 +291,20 @@
                     <h3><i class='bx bx-broadcast'></i> إرسال إعلان حي (Live Banner)</h3>
                     <p class="form-note">سيظهر هذا الإعلان فوراً للمستخدمين المتصلين حالياً وسيستمر بالظهور حتى تقوم بإيقافه.</p>
                     <div class="input-group">
-                        <label>رسالة الإعلان</label>
-                        <input type="text" id="live-banner-text" placeholder="مثال: يرجى العلم أنه يوجد صيانة في سيرفرات يوتيوب حالياً...">
+                        <label>عنوان الإعلان</label>
+                        <input type="text" id="live-banner-title" placeholder="مثال: تنبيه هام من الإدارة">
                     </div>
                     <div class="input-group">
-                        <label>لون الإعلان</label>
+                        <label>نص الإعلان</label>
+                        <textarea id="live-banner-text" rows="3" placeholder="مثال: يرجى العلم أنه يوجد صيانة في سيرفرات يوتيوب حالياً..."></textarea>
+                    </div>
+                    <div class="input-group">
+                        <label>نوع الإعلان</label>
                         <select id="live-banner-color">
-                            <option value="info">أزرق (معلومة)</option>
-                            <option value="warning">أصفر (تنبيه)</option>
-                            <option value="danger">أحمر (تحذير)</option>
-                            <option value="success">أخضر (نجاح)</option>
+                            <option value="info">إشعار إداري (أزرق)</option>
+                            <option value="warning">تنبيه هام (أصفر)</option>
+                            <option value="alert">إعلان عاجل (أحمر)</option>
+                            <option value="update">تحديث جديد (أخضر)</option>
                         </select>
                     </div>
                     <div class="button-group">

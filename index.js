@@ -795,9 +795,11 @@ async function loadLiveBanner() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists() && docSnap.data().active) {
             const data = docSnap.data();
-            document.getElementById('live-banner-text').value = data.message || '';
+            document.getElementById('live-banner-title').value = data.title || '';
+            document.getElementById('live-banner-text').value = data.body || '';
             document.getElementById('live-banner-color').value = data.type || 'info';
         } else {
+            document.getElementById('live-banner-title').value = '';
             document.getElementById('live-banner-text').value = '';
         }
     } catch (e) {
@@ -807,11 +809,12 @@ async function loadLiveBanner() {
 
 document.getElementById('btn-activate-banner')?.addEventListener('click', async () => {
     const statusEl = document.getElementById('banner-status');
-    const msg = document.getElementById('live-banner-text').value.trim();
-    const color = document.getElementById('live-banner-color').value;
+    const title = document.getElementById('live-banner-title').value.trim();
+    const body = document.getElementById('live-banner-text').value.trim();
+    const type = document.getElementById('live-banner-color').value;
     
-    if (!msg) {
-        statusEl.textContent = 'الرجاء إدخال رسالة الإعلان';
+    if (!body) {
+        statusEl.textContent = 'الرجاء إدخال نص الإعلان';
         statusEl.style.color = 'var(--error)';
         return;
     }
@@ -819,11 +822,13 @@ document.getElementById('btn-activate-banner')?.addEventListener('click', async 
     try {
         await setDoc(doc(db, "announcements", "live_banner"), {
             active: true,
-            message: msg,
-            type: color,
+            title: title || 'رسالة من إدارة البرنامج',
+            body: body,
+            type: type,
+            created_at: new Date().toISOString(),
             updatedAt: serverTimestamp()
         });
-        statusEl.textContent = '✅ تم تفعيل الإعلان وظهر للمستخدمين';
+        statusEl.textContent = '✅ تم تفعيل الإعلان وسيظهر في التطبيق فوراً';
         statusEl.style.color = 'var(--success)';
         setTimeout(() => statusEl.textContent = '', 3000);
     } catch (e) {
@@ -840,6 +845,7 @@ document.getElementById('btn-deactivate-banner')?.addEventListener('click', asyn
             updatedAt: serverTimestamp()
         }, { merge: true });
         
+        document.getElementById('live-banner-title').value = '';
         document.getElementById('live-banner-text').value = '';
         statusEl.textContent = '✅ تم إيقاف الإعلان وإخفاؤه من التطبيق';
         statusEl.style.color = 'var(--success)';

@@ -12,9 +12,6 @@
 </head>
 <body>
 
-    <!-- TOAST CONTAINER -->
-    <div id="toast-container" class="toast-container"></div>
-
     <!-- AUTH VIEW -->
     <div id="auth-view" class="auth-container">
         <div class="auth-card">
@@ -65,17 +62,11 @@
                 <a href="#panel-notifications" class="nav-item" data-target="panel-notifications" onclick="window.switchTab && window.switchTab('panel-notifications')">
                     <i class='bx bx-bell'></i> <span>الإشعارات</span>
                 </a>
-                <a href="#panel-announcements" class="nav-item" data-target="panel-announcements" onclick="window.switchTab && window.switchTab('panel-announcements')">
-                    <i class='bx bx-broadcast'></i> <span>إدارة الإعلانات</span>
-                </a>
                 <a href="#panel-chats" class="nav-item" data-target="panel-chats" onclick="window.switchTab && window.switchTab('panel-chats')">
                     <i class='bx bx-chat'></i> <span>الدعم الفني</span>
                 </a>
                 <a href="#panel-crashes" class="nav-item" data-target="panel-crashes" onclick="window.switchTab && window.switchTab('panel-crashes')">
                     <i class='bx bx-bug'></i> <span>تقارير الأعطال</span>
-                </a>
-                <a href="#panel-activity" class="nav-item" data-target="panel-activity" onclick="window.switchTab && window.switchTab('panel-activity')">
-                    <i class='bx bx-history'></i> <span>سجل النشاط</span>
                 </a>
                 <a href="#panel-config" class="nav-item" data-target="panel-config" onclick="window.switchTab && window.switchTab('panel-config')">
                     <i class='bx bx-cog'></i> <span>إعدادات التطبيق</span>
@@ -98,28 +89,25 @@
                 <header class="panel-header">
                     <div>
                         <h1>نظرة عامة</h1>
-                        <p class="panel-subtitle">مرحباً بك في لوحة التحكم <span id="overview-refresh-status" class="refresh-dot"></span></p>
-                    </div>
-                    <div class="header-actions">
-                        <button id="btn-refresh-overview" class="btn outline btn-sm"><i class='bx bx-refresh'></i> تحديث</button>
+                        <p class="panel-subtitle">مرحباً بك في لوحة التحكم</p>
                     </div>
                 </header>
                 <div class="stats-grid">
-                    <div class="stat-card clickable" data-jump="panel-users">
+                    <div class="stat-card">
                         <div class="stat-icon"><i class='bx bx-user'></i></div>
                         <div class="stat-info">
                             <h3>المستخدمين</h3>
                             <h2 id="stat-users">--</h2>
                         </div>
                     </div>
-                    <div class="stat-card clickable" data-jump="panel-crashes">
+                    <div class="stat-card">
                         <div class="stat-icon"><i class='bx bx-bug-alt'></i></div>
                         <div class="stat-info">
                             <h3>تقارير الأعطال</h3>
                             <h2 id="stat-crashes">--</h2>
                         </div>
                     </div>
-                    <div class="stat-card clickable" data-jump="panel-chats">
+                    <div class="stat-card">
                         <div class="stat-icon"><i class='bx bx-chat'></i></div>
                         <div class="stat-info">
                             <h3>محادثات الدعم</h3>
@@ -131,47 +119,6 @@
                         <div class="stat-info">
                             <h3>Heartbeats</h3>
                             <h2 id="stat-heartbeats">--</h2>
-                        </div>
-                    </div>
-                    <div class="stat-card clickable" data-jump="panel-crashes">
-                        <div class="stat-icon"><i class='bx bx-error'></i></div>
-                        <div class="stat-info">
-                            <h3>أخطاء اليوم</h3>
-                            <h2 id="stat-errors-today">--</h2>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- OVERVIEW EXTRA: CHART + RECENT ACTIVITY -->
-                <div class="overview-grid">
-                    <div class="form-card">
-                        <div class="card-head">
-                            <h3><i class='bx bx-line-chart'></i> نمو المستخدمين (آخر 7 أيام)</h3>
-                        </div>
-                        <div id="growth-chart" class="chart-container">
-                            <svg id="growth-svg" viewBox="0 0 600 200" preserveAspectRatio="none">
-                                <defs>
-                                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.4"/>
-                                        <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-                                    </linearGradient>
-                                </defs>
-                                <g id="chart-grid"></g>
-                                <path id="chart-area" fill="url(#chartGradient)"></path>
-                                <path id="chart-line" fill="none" stroke="#ffffff" stroke-width="2"></path>
-                                <g id="chart-points"></g>
-                                <g id="chart-labels"></g>
-                            </svg>
-                            <p id="chart-empty" class="empty-state hidden">لا توجد بيانات كافية بعد</p>
-                        </div>
-                    </div>
-                    <div class="form-card">
-                        <div class="card-head">
-                            <h3><i class='bx bx-time-five'></i> آخر النشاطات</h3>
-                            <a href="#panel-activity" class="link-btn" onclick="window.switchTab && window.switchTab('panel-activity'); return false;">عرض الكل</a>
-                        </div>
-                        <div id="recent-activity-list" class="recent-activity">
-                            <p class="empty-state">جارِ التحميل...</p>
                         </div>
                     </div>
                 </div>
@@ -190,15 +137,6 @@
                     </div>
                 </header>
 
-                <!-- USERS SEARCH BAR -->
-                <div class="toolbar">
-                    <div class="search-input">
-                        <i class='bx bx-search'></i>
-                        <input type="text" id="users-search" placeholder="ابحث عن مستخدم بالاسم أو المعرّف...">
-                    </div>
-                    <span id="users-count" class="toolbar-meta"></span>
-                </div>
-
                 <!-- SEND TO ALL FORM -->
                 <div id="form-send-all" class="form-card hidden">
                     <h3><i class='bx bx-broadcast'></i> إرسال إشعار لكل المستخدمين</h3>
@@ -211,23 +149,21 @@
                         <label>الرسالة</label>
                         <textarea id="all-notif-body" placeholder="اكتب الرسالة هنا..."></textarea>
                     </div>
-                    <div class="form-row">
-                        <div class="input-group">
-                            <label>النوع</label>
-                            <select id="all-notif-type">
-                                <option value="info">إشعار إداري</option>
-                                <option value="warning">تنبيه هام</option>
-                                <option value="update">تحديث جديد</option>
-                                <option value="alert">إعلان عاجل</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <label>الأولوية</label>
-                            <select id="all-notif-priority">
-                                <option value="normal">عادية</option>
-                                <option value="high">عالية</option>
-                            </select>
-                        </div>
+                    <div class="input-group">
+                        <label>النوع</label>
+                        <select id="all-notif-type">
+                            <option value="info">إشعار إداري</option>
+                            <option value="warning">تنبيه هام</option>
+                            <option value="update">تحديث جديد</option>
+                            <option value="alert">إعلان عاجل</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>الأولوية</label>
+                        <select id="all-notif-priority">
+                            <option value="normal">عادية</option>
+                            <option value="high">عالية</option>
+                        </select>
                     </div>
                     <div class="input-group">
                         <label>رابط (اختياري)</label>
@@ -264,51 +200,24 @@
                         <p class="panel-subtitle">أرسل رسالة لمستخدم محدد — ستظهر عندما يفتح التطبيق</p>
                     </div>
                 </header>
-                <div class="notifications-grid">
-                    <div class="form-card">
-                        <h3><i class='bx bx-user-plus'></i> إشعار لمستخدم محدد</h3>
-                        <div class="input-group">
-                            <label>اختر المستخدم</label>
-                            <select id="notif-user-select">
-                                <option value="">-- اختر مستخدم --</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <label>عنوان الرسالة</label>
-                            <input type="text" id="notif-title" placeholder="عنوان الإشعار">
-                        </div>
-                        <div class="input-group">
-                            <label>محتوى الرسالة</label>
-                            <textarea id="notif-body" placeholder="اكتب الرسالة هنا..."></textarea>
-                        </div>
-                        <button id="btn-send-notif" class="btn primary"><i class='bx bx-send'></i> إرسال</button>
-                        <div id="notif-status" class="status-text mt-1"></div>
+                <div class="form-card">
+                    <h3><i class='bx bx-user-plus'></i> إشعار لمستخدم محدد</h3>
+                    <div class="input-group">
+                        <label>اختر المستخدم</label>
+                        <select id="notif-user-select">
+                            <option value="">-- اختر مستخدم --</option>
+                        </select>
                     </div>
-                    <div class="form-card">
-                        <div class="card-head">
-                            <h3><i class='bx bx-history'></i> سجل الإشعارات السابقة</h3>
-                            <button id="btn-refresh-notif-history" class="btn-icon" title="تحديث"><i class='bx bx-refresh'></i></button>
-                        </div>
-                        <div id="notif-history-list" class="notif-history">
-                            <p class="empty-state">جارِ التحميل...</p>
-                        </div>
+                    <div class="input-group">
+                        <label>عنوان الرسالة</label>
+                        <input type="text" id="notif-title" placeholder="عنوان الإشعار">
                     </div>
-                </div>
-            </section>
-
-            <!-- ANNOUNCEMENTS MANAGER -->
-            <section id="panel-announcements" class="panel hidden">
-                <header class="panel-header">
-                    <div>
-                        <h1>إدارة الإعلانات</h1>
-                        <p class="panel-subtitle">تفعيل/تعطيل أو حذف الإعلانات التي تظهر لكل المستخدمين</p>
+                    <div class="input-group">
+                        <label>محتوى الرسالة</label>
+                        <textarea id="notif-body" placeholder="اكتب الرسالة هنا..."></textarea>
                     </div>
-                    <div class="header-actions">
-                        <button id="btn-refresh-announcements" class="btn outline btn-sm"><i class='bx bx-refresh'></i> تحديث</button>
-                    </div>
-                </header>
-                <div id="announcements-list" class="announcements-list">
-                    <p class="empty-state">جارِ التحميل...</p>
+                    <button id="btn-send-notif" class="btn primary"><i class='bx bx-send'></i> إرسال</button>
+                    <div id="notif-status" class="status-text mt-1"></div>
                 </div>
             </section>
 
@@ -326,10 +235,6 @@
                         <p class="empty-state">جارِ التحميل...</p>
                     </div>
                     <div class="chat-window" id="chat-window">
-                        <div class="chat-window-header hidden" id="chat-window-header">
-                            <h4 id="chat-window-name"></h4>
-                            <span id="chat-window-email" class="text-muted"></span>
-                        </div>
                         <div class="chat-messages" id="chat-messages">
                             <p class="empty-state">اختر محادثة من القائمة</p>
                         </div>
@@ -346,26 +251,15 @@
                 <header class="panel-header">
                     <div>
                         <h1>تقارير الأعطال</h1>
-                        <p class="panel-subtitle">تقارير الأخطاء من التطبيق — اضغط على الصف للتفاصيل أو على المستخدم لعرض ملفه</p>
+                        <p class="panel-subtitle">تقارير الأخطاء من التطبيق</p>
                     </div>
                     <button id="btn-refresh-crashes" class="btn outline btn-sm"><i class='bx bx-refresh'></i> تحديث</button>
                 </header>
-                <div class="toolbar">
-                    <div class="search-input">
-                        <i class='bx bx-search'></i>
-                        <input type="text" id="crashes-search" placeholder="ابحث في التقارير...">
-                    </div>
-                    <select id="crashes-user-filter" class="filter-select">
-                        <option value="">— كل المستخدمين —</option>
-                    </select>
-                    <span id="crashes-count" class="toolbar-meta"></span>
-                </div>
                 <div class="table-container">
-                    <table class="data-table clickable-rows">
+                    <table class="data-table">
                         <thead>
                             <tr>
                                 <th>التاريخ</th>
-                                <th>المستخدم</th>
                                 <th>رسالة الخطأ</th>
                                 <th>الفئة</th>
                                 <th>إجراءات</th>
@@ -374,20 +268,6 @@
                         <tbody id="crashes-table-body">
                         </tbody>
                     </table>
-                </div>
-            </section>
-
-            <!-- ACTIVITY LOG -->
-            <section id="panel-activity" class="panel hidden">
-                <header class="panel-header">
-                    <div>
-                        <h1>سجل النشاط</h1>
-                        <p class="panel-subtitle">جميع العمليات التي قام بها الأدمن</p>
-                    </div>
-                    <button id="btn-refresh-activity" class="btn outline btn-sm"><i class='bx bx-refresh'></i> تحديث</button>
-                </header>
-                <div id="activity-list" class="activity-list">
-                    <p class="empty-state">جارِ التحميل...</p>
                 </div>
             </section>
 
@@ -471,39 +351,6 @@
         </div>
     </div>
 
-    <!-- USER DETAIL MODAL -->
-    <div id="modal-user-detail" class="modal-overlay hidden">
-        <div class="modal-card">
-            <button class="modal-close" data-close="modal-user-detail" title="إغلاق"><i class='bx bx-x'></i></button>
-            <div id="user-detail-content">
-                <p class="empty-state">جارِ التحميل...</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- CRASH DETAIL MODAL -->
-    <div id="modal-crash-detail" class="modal-overlay hidden">
-        <div class="modal-card modal-lg">
-            <button class="modal-close" data-close="modal-crash-detail" title="إغلاق"><i class='bx bx-x'></i></button>
-            <h3><i class='bx bx-bug'></i> تفاصيل تقرير العطل</h3>
-            <div id="crash-detail-content">
-                <p class="empty-state">جارِ التحميل...</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- CONFIRM MODAL -->
-    <div id="modal-confirm" class="modal-overlay hidden">
-        <div class="modal-card modal-sm">
-            <h3 id="confirm-title">تأكيد العملية</h3>
-            <p id="confirm-message" class="modal-subtitle">هل أنت متأكد؟</p>
-            <div class="button-group">
-                <button id="btn-confirm-yes" class="btn danger">نعم، تنفيذ</button>
-                <button id="btn-confirm-no" class="btn outline">إلغاء</button>
-            </div>
-        </div>
-    </div>
-
-    <script type="module" src="index.js?v=5.0.0"></script>
+    <script type="module" src="index.js?v=4.2.0"></script>
 </body>
 </html>

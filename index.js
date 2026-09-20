@@ -274,7 +274,7 @@ async function loadUsers() {
             const isBanned = data.status === 'banned';
             const statusBadge = isBanned 
                 ? '<span class="badge" style="background:var(--error);color:#fff;">محظور</span>' 
-                : '<span class="badge" style="background:var(--success);color:#fff;">نشط</span>';
+                : '<span class="badge" style="background:var(--success);color:#fff;">حساب فعّال</span>';
 
             const tr = document.createElement('tr');
             const avatarHtml = data.photoURL
@@ -882,8 +882,17 @@ async function loadActiveUsers() {
                 }
             }
             
-            // Still display them, but maybe grey out if not recent
-            const deviceId = docSnap.id || data.device_id || 'Unknown';
+            // Try to get a meaningful name
+            let sender = data.username || data.email || docSnap.id || data.device_id || 'مجهول';
+            
+            // If sender looks like a long ID, try to find it in cachedUsers
+            if (sender.length > 15 && cachedUsers.length > 0) {
+                const foundUser = cachedUsers.find(u => u.uid === sender || (u.data && u.data.device_id === sender));
+                if (foundUser) {
+                    sender = foundUser.username || foundUser.data.email || sender;
+                }
+            }
+            
             const os = data.system_info?.system || data.os || '—';
             const version = data.system_info?.app_version || data.app_version || '—';
             
@@ -892,7 +901,7 @@ async function loadActiveUsers() {
             else activeCount++;
 
             tr.innerHTML = `
-                <td>${escapeHtml(deviceId)}</td>
+                <td>${escapeHtml(sender)}</td>
                 <td>${escapeHtml(os)}</td>
                 <td>${escapeHtml(version)}</td>
                 <td>${formatDate(data.createdAt)} ${isRecent ? '<span style="color:var(--success); font-size: 0.8rem;">(متصل)</span>' : ''}</td>

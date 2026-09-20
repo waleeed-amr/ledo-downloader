@@ -88,6 +88,12 @@ export function switchTab(targetId) {
         case 'panel-crashes':
             loadCrashes();
             break;
+        case 'panel-announcements':
+            loadLiveBanner();
+            break;
+        case 'panel-active-users':
+            loadActiveUsers();
+            break;
         case 'panel-config':
             loadAppConfig();
             break;
@@ -250,13 +256,13 @@ async function loadOverviewStats() {
 async function loadUsers() {
     const tbody = document.getElementById('users-table-body');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">جارِ التحميل...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">جارِ التحميل...</td></tr>';
     try {
         const snap = await getDocs(collection(db, "users"));
         cachedUsers = [];
         tbody.innerHTML = '';
         if (snap.empty) {
-            tbody.innerHTML = '<tr><td colspan="4" class="empty-state">لا يوجد مستخدمين</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">لا يوجد مستخدمين</td></tr>';
             return;
         }
         snap.forEach(docSnap => {
@@ -265,6 +271,11 @@ async function loadUsers() {
             const username = data.username || data.email || uid.slice(0, 8);
             cachedUsers.push({ uid, username, data });
 
+            const isBanned = data.status === 'banned';
+            const statusBadge = isBanned 
+                ? '<span class="badge" style="background:var(--error);color:#fff;">محظور</span>' 
+                : '<span class="badge" style="background:var(--success);color:#fff;">نشط</span>';
+
             const tr = document.createElement('tr');
             const avatarHtml = data.photoURL
                 ? `<img src="${data.photoURL}" class="user-avatar" alt="avatar">`
@@ -272,10 +283,14 @@ async function loadUsers() {
             tr.innerHTML = `
                 <td>${escapeHtml(username)}</td>
                 <td>${avatarHtml}</td>
+                <td>${statusBadge}</td>
                 <td>${formatDate(data.createdAt)}</td>
                 <td>
-                    <button class="btn outline btn-sm btn-msg-user" data-uid="${uid}" data-name="${escapeHtml(username)}">
-                        <i class='bx bx-envelope'></i> رسالة
+                    <button class="btn outline btn-sm btn-msg-user" data-uid="${uid}" data-name="${escapeHtml(username)}" title="إرسال رسالة">
+                        <i class='bx bx-envelope'></i>
+                    </button>
+                    <button class="btn ${isBanned ? 'primary' : 'danger'} btn-sm btn-toggle-ban" data-uid="${uid}" data-banned="${isBanned}" title="${isBanned ? 'فك الحظر' : 'حظر'}">
+                        <i class='bx ${isBanned ? 'bx-check-shield' : 'bx-block'}'></i>
                     </button>
                 </td>
             `;
@@ -288,8 +303,29 @@ async function loadUsers() {
                 openSendUserMsgModal(btn.dataset.uid, btn.dataset.name);
             });
         });
+
+        // Attach ban toggle handlers
+        document.querySelectorAll('.btn-toggle-ban').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const uid = btn.dataset.uid;
+                const currentlyBanned = btn.dataset.banned === 'true';
+                const actionText = currentlyBanned ? 'فك الحظر عن' : 'حظر';
+                
+                if (confirm(`هل أنت متأكد من ${actionText} هذا المستخدم؟`)) {
+                    try {
+                        await setDoc(doc(db, "users", uid), {
+                            status: currentlyBanned ? 'active' : 'banned',
+                            updatedAt: serverTimestamp()
+                        }, { merge: true });
+                        loadUsers(); // refresh
+                    } catch (e) {
+                        alert('خطأ: ' + e.message);
+                    }
+                }
+            });
+        });
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="4" class="error-text">خطأ في تحميل المستخدمين — تأكد من صلاحيات الأدمن</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="error-text">خطأ في تحميل المستخدمين — تأكد من صلاحيات الأدمن</td></tr>';
         console.error(e);
     }
 }
@@ -562,31 +598,62 @@ async function sendChatReply() {
 }
 
 // ─── CRASH REPORTS ───
+// Store crash data for modal
+let crashesData = {};
+
 async function loadCrashes() {
     const tbody = document.getElementById('crashes-table-body');
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">جارِ التحميل...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">جارِ التحميل...</td></tr>';
     try {
         const q = query(collection(db, "crash_reports"), orderBy("createdAt", "desc"), limit(100));
         const snap = await getDocs(q);
         tbody.innerHTML = '';
         if (snap.empty) {
-            tbody.innerHTML = '<tr><td colspan="4" class="empty-state">لا توجد تقارير</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">لا توجد تقارير</td></tr>';
             return;
         }
+        
+        crashesData = {}; // clear old data
         snap.forEach(docSnap => {
             const data = docSnap.data();
+            const id = docSnap.id;
+            crashesData[id] = data;
+            
+            const sender = data.email || data.userId || data.device_id || 'مجهول';
+            
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${formatDate(data.createdAt)}</td>
-                <td title="${escapeHtml(data.message || '')}">${escapeHtml((data.message || '').slice(0, 80))}</td>
+                <td title="${escapeHtml(sender)}">${escapeHtml(sender)}</td>
+                <td title="${escapeHtml(data.message || '')}">${escapeHtml((data.message || '').slice(0, 50))}...</td>
                 <td>${escapeHtml(data.error_category || data.category || '—')}</td>
                 <td>
-                    <button class="btn danger btn-sm btn-delete-crash" data-id="${docSnap.id}">
+                    <button class="btn outline btn-sm btn-view-crash" data-id="${id}" title="عرض التفاصيل">
+                        <i class='bx bx-show'></i>
+                    </button>
+                    <button class="btn danger btn-sm btn-delete-crash" data-id="${id}" title="حذف">
                         <i class='bx bx-trash'></i>
                     </button>
                 </td>
             `;
             tbody.appendChild(tr);
+        });
+
+        document.querySelectorAll('.btn-view-crash').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.id;
+                const data = crashesData[id];
+                if (!data) return;
+                
+                document.getElementById('modal-crash-subtitle').textContent = `تاريخ التقرير: ${formatDate(data.createdAt)}`;
+                document.getElementById('modal-crash-sender').value = data.email || data.userId || data.device_id || 'مجهول';
+                document.getElementById('modal-crash-msg').value = data.raw_message || data.message || 'لا توجد رسالة';
+                
+                const stackTrace = data.stack_trace || data.stack || 'No stack trace available.';
+                document.getElementById('modal-crash-stack').value = stackTrace;
+                
+                document.getElementById('modal-crash-details').classList.remove('hidden');
+            });
         });
 
         document.querySelectorAll('.btn-delete-crash').forEach(btn => {
@@ -600,10 +667,14 @@ async function loadCrashes() {
             });
         });
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="4" class="error-text">خطأ في تحميل التقارير</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="error-text">خطأ في تحميل التقارير</td></tr>';
         console.error(e);
     }
 }
+
+document.getElementById('btn-close-crash-modal')?.addEventListener('click', () => {
+    document.getElementById('modal-crash-details').classList.add('hidden');
+});
 
 document.getElementById('btn-refresh-crashes').addEventListener('click', loadCrashes);
 
@@ -628,6 +699,24 @@ async function loadAppConfig() {
             document.getElementById('config-privacy-url').value = l.privacy_url || '';
             document.getElementById('config-terms-url').value = l.terms_url || '';
             document.getElementById('config-support-url').value = l.support_url || '';
+        }
+
+        // status config (Maintenance)
+        const statusDoc = await getDoc(doc(db, "app_config", "status"));
+        if (statusDoc.exists()) {
+            const s = statusDoc.data();
+            document.getElementById('config-maintenance').checked = !!s.maintenance_mode;
+            document.getElementById('config-maintenance-msg').value = s.maintenance_message || '';
+        }
+
+        // features config
+        const featuresDoc = await getDoc(doc(db, "app_config", "features"));
+        if (featuresDoc.exists()) {
+            const f = featuresDoc.data();
+            // Default to true if undefined
+            document.getElementById('config-feature-yt').checked = f.youtube_enabled !== false;
+            document.getElementById('config-feature-insta').checked = f.instagram_enabled !== false;
+            document.getElementById('config-feature-tiktok').checked = f.tiktok_enabled !== false;
         }
     } catch (e) {
         console.error("Config load error:", e);
@@ -671,6 +760,161 @@ document.getElementById('btn-save-links').addEventListener('click', async () => 
         statusEl.style.color = 'var(--error)';
     }
 });
+
+document.getElementById('btn-save-features').addEventListener('click', async () => {
+    const statusEl = document.getElementById('features-status');
+    try {
+        // Save Maintenance Mode
+        await setDoc(doc(db, "app_config", "status"), {
+            maintenance_mode: document.getElementById('config-maintenance').checked,
+            maintenance_message: document.getElementById('config-maintenance-msg').value.trim(),
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        // Save Features
+        await setDoc(doc(db, "app_config", "features"), {
+            youtube_enabled: document.getElementById('config-feature-yt').checked,
+            instagram_enabled: document.getElementById('config-feature-insta').checked,
+            tiktok_enabled: document.getElementById('config-feature-tiktok').checked,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        statusEl.textContent = '✅ تم حفظ الإعدادات والصيانة بنجاح';
+        statusEl.style.color = 'var(--success)';
+        setTimeout(() => statusEl.textContent = '', 3000);
+    } catch (e) {
+        statusEl.textContent = 'خطأ: ' + e.message;
+        statusEl.style.color = 'var(--error)';
+    }
+});
+
+// ─── LIVE ANNOUNCEMENTS ───
+async function loadLiveBanner() {
+    try {
+        const docRef = doc(db, "announcements", "live_banner");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().active) {
+            const data = docSnap.data();
+            document.getElementById('live-banner-text').value = data.message || '';
+            document.getElementById('live-banner-color').value = data.type || 'info';
+        } else {
+            document.getElementById('live-banner-text').value = '';
+        }
+    } catch (e) {
+        console.error("Live banner load error:", e);
+    }
+}
+
+document.getElementById('btn-activate-banner')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('banner-status');
+    const msg = document.getElementById('live-banner-text').value.trim();
+    const color = document.getElementById('live-banner-color').value;
+    
+    if (!msg) {
+        statusEl.textContent = 'الرجاء إدخال رسالة الإعلان';
+        statusEl.style.color = 'var(--error)';
+        return;
+    }
+
+    try {
+        await setDoc(doc(db, "announcements", "live_banner"), {
+            active: true,
+            message: msg,
+            type: color,
+            updatedAt: serverTimestamp()
+        });
+        statusEl.textContent = '✅ تم تفعيل الإعلان وظهر للمستخدمين';
+        statusEl.style.color = 'var(--success)';
+        setTimeout(() => statusEl.textContent = '', 3000);
+    } catch (e) {
+        statusEl.textContent = 'خطأ: ' + e.message;
+        statusEl.style.color = 'var(--error)';
+    }
+});
+
+document.getElementById('btn-deactivate-banner')?.addEventListener('click', async () => {
+    const statusEl = document.getElementById('banner-status');
+    try {
+        await setDoc(doc(db, "announcements", "live_banner"), {
+            active: false,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+        
+        document.getElementById('live-banner-text').value = '';
+        statusEl.textContent = '✅ تم إيقاف الإعلان وإخفاؤه من التطبيق';
+        statusEl.style.color = 'var(--success)';
+        setTimeout(() => statusEl.textContent = '', 3000);
+    } catch (e) {
+        statusEl.textContent = 'خطأ: ' + e.message;
+        statusEl.style.color = 'var(--error)';
+    }
+});
+
+// ─── ACTIVE USERS (HEARTBEATS) ───
+async function loadActiveUsers() {
+    const tbody = document.getElementById('active-users-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">جارِ التحميل...</td></tr>';
+    try {
+        // Query heartbeats from the last 5 minutes (300,000 ms)
+        const fiveMinutesAgoMs = Date.now() - 300000;
+        // The ISO string can be compared alphabetically if createdAt is string
+        const fiveMinutesAgoStr = new Date(fiveMinutesAgoMs).toISOString();
+        
+        const q = query(
+            collection(db, "heartbeats"),
+            orderBy("createdAt", "desc"),
+            limit(100)
+        );
+        const snap = await getDocs(q);
+        tbody.innerHTML = '';
+        
+        let activeCount = 0;
+        snap.forEach(docSnap => {
+            const data = docSnap.data();
+            // Filter locally to ensure they are actually recent
+            let isRecent = false;
+            if (data.createdAt) {
+                if (data.createdAt.seconds) {
+                    isRecent = (data.createdAt.seconds * 1000) > fiveMinutesAgoMs;
+                } else if (typeof data.createdAt === 'string') {
+                    isRecent = new Date(data.createdAt).getTime() > fiveMinutesAgoMs;
+                }
+            }
+            
+            // Still display them, but maybe grey out if not recent
+            const deviceId = docSnap.id || data.device_id || 'Unknown';
+            const os = data.system_info?.system || data.os || '—';
+            const version = data.system_info?.app_version || data.app_version || '—';
+            
+            const tr = document.createElement('tr');
+            if (!isRecent) tr.style.opacity = '0.5';
+            else activeCount++;
+
+            tr.innerHTML = `
+                <td>${escapeHtml(deviceId)}</td>
+                <td>${escapeHtml(os)}</td>
+                <td>${escapeHtml(version)}</td>
+                <td>${formatDate(data.createdAt)} ${isRecent ? '<span style="color:var(--success); font-size: 0.8rem;">(متصل)</span>' : ''}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        if (snap.empty) {
+            tbody.innerHTML = '<tr><td colspan="4" class="empty-state">لا يوجد نشاط حالياً</td></tr>';
+        }
+        
+        // Update overview stats if we are here
+        const statEl = document.getElementById('stat-heartbeats');
+        if (statEl) statEl.textContent = activeCount.toString();
+
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" class="error-text">خطأ في تحميل النشاط</td></tr>';
+        console.error(e);
+    }
+}
+
+document.getElementById('btn-refresh-active-users')?.addEventListener('click', loadActiveUsers);
 
 // ─── HELPERS ───
 function escapeHtml(str) {

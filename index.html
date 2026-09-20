@@ -65,6 +65,12 @@
                 <a href="#panel-chats" class="nav-item" data-target="panel-chats" onclick="window.switchTab && window.switchTab('panel-chats')">
                     <i class='bx bx-chat'></i> <span>الدعم الفني</span>
                 </a>
+                <a href="#panel-announcements" class="nav-item" data-target="panel-announcements" onclick="window.switchTab && window.switchTab('panel-announcements')">
+                    <i class='bx bx-broadcast'></i> <span>الإعلانات الحية</span>
+                </a>
+                <a href="#panel-active-users" class="nav-item" data-target="panel-active-users" onclick="window.switchTab && window.switchTab('panel-active-users')">
+                    <i class='bx bx-pulse'></i> <span>النشاط المباشر</span>
+                </a>
                 <a href="#panel-crashes" class="nav-item" data-target="panel-crashes" onclick="window.switchTab && window.switchTab('panel-crashes')">
                     <i class='bx bx-bug'></i> <span>تقارير الأعطال</span>
                 </a>
@@ -182,6 +188,7 @@
                             <tr>
                                 <th>اسم المستخدم</th>
                                 <th>الصورة</th>
+                                <th>الحالة</th>
                                 <th>تاريخ التسجيل</th>
                                 <th>إجراءات</th>
                             </tr>
@@ -260,12 +267,70 @@
                         <thead>
                             <tr>
                                 <th>التاريخ</th>
+                                <th>المصدر</th>
                                 <th>رسالة الخطأ</th>
                                 <th>الفئة</th>
                                 <th>إجراءات</th>
                             </tr>
                         </thead>
                         <tbody id="crashes-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- LIVE ANNOUNCEMENTS -->
+            <section id="panel-announcements" class="panel hidden">
+                <header class="panel-header">
+                    <div>
+                        <h1>الإعلانات الحية</h1>
+                        <p class="panel-subtitle">شريط إعلاني يظهر أعلى التطبيق فوراً لجميع المستخدمين</p>
+                    </div>
+                </header>
+                <div class="form-card">
+                    <h3><i class='bx bx-broadcast'></i> إرسال إعلان حي (Live Banner)</h3>
+                    <p class="form-note">سيظهر هذا الإعلان فوراً للمستخدمين المتصلين حالياً وسيستمر بالظهور حتى تقوم بإيقافه.</p>
+                    <div class="input-group">
+                        <label>رسالة الإعلان</label>
+                        <input type="text" id="live-banner-text" placeholder="مثال: يرجى العلم أنه يوجد صيانة في سيرفرات يوتيوب حالياً...">
+                    </div>
+                    <div class="input-group">
+                        <label>لون الإعلان</label>
+                        <select id="live-banner-color">
+                            <option value="info">أزرق (معلومة)</option>
+                            <option value="warning">أصفر (تنبيه)</option>
+                            <option value="danger">أحمر (تحذير)</option>
+                            <option value="success">أخضر (نجاح)</option>
+                        </select>
+                    </div>
+                    <div class="button-group">
+                        <button id="btn-activate-banner" class="btn primary"><i class='bx bx-broadcast'></i> تفعيل الإعلان</button>
+                        <button id="btn-deactivate-banner" class="btn outline"><i class='bx bx-x-circle'></i> إيقاف الإعلان</button>
+                    </div>
+                    <div id="banner-status" class="status-text mt-1"></div>
+                </div>
+            </section>
+
+            <!-- ACTIVE USERS (LIVE HEARTBEATS) -->
+            <section id="panel-active-users" class="panel hidden">
+                <header class="panel-header">
+                    <div>
+                        <h1>النشاط المباشر</h1>
+                        <p class="panel-subtitle">الأجهزة المتصلة بالتطبيق حالياً (آخر 5 دقائق)</p>
+                    </div>
+                    <button id="btn-refresh-active-users" class="btn outline btn-sm"><i class='bx bx-refresh'></i> تحديث</button>
+                </header>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Device ID</th>
+                                <th>نظام التشغيل</th>
+                                <th>نسخة التطبيق</th>
+                                <th>آخر نبضة (Heartbeat)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-users-body">
                         </tbody>
                     </table>
                 </div>
@@ -323,6 +388,41 @@
                         <button id="btn-save-links" class="btn primary"><i class='bx bx-save'></i> حفظ الروابط</button>
                         <div id="links-status" class="status-text mt-1"></div>
                     </div>
+                    <div class="form-card">
+                        <h3><i class='bx bx-shield-quarter'></i> التحكم في الميزات والصيانة</h3>
+                        <p class="form-note">تغيير هذه الإعدادات سيطبق فوراً على جميع الأجهزة.</p>
+                        
+                        <div class="input-group checkbox-group" style="margin-top: 1rem;">
+                            <label style="color: var(--error); font-weight: bold; font-size: 1rem;">
+                                <input type="checkbox" id="config-maintenance"> وضع الصيانة (إيقاف التطبيق بالكامل)
+                            </label>
+                        </div>
+                        <div class="input-group">
+                            <label>رسالة وضع الصيانة (تظهر للمستخدمين)</label>
+                            <input type="text" id="config-maintenance-msg" placeholder="نحن في صيانة حالياً، عد لاحقاً.">
+                        </div>
+
+                        <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+                        
+                        <div class="input-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="config-feature-yt"> تفعيل تحميل يوتيوب (YouTube)
+                            </label>
+                        </div>
+                        <div class="input-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="config-feature-insta"> تفعيل تحميل إنستجرام (Instagram)
+                            </label>
+                        </div>
+                        <div class="input-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="config-feature-tiktok"> تفعيل تحميل تيك توك (TikTok)
+                            </label>
+                        </div>
+
+                        <button id="btn-save-features" class="btn primary mt-1"><i class='bx bx-save'></i> حفظ الإعدادات</button>
+                        <div id="features-status" class="status-text mt-1"></div>
+                    </div>
                 </div>
             </section>
 
@@ -348,6 +448,29 @@
                 <button id="btn-modal-cancel" class="btn outline">إلغاء</button>
             </div>
             <div id="modal-msg-status" class="status-text mt-1"></div>
+        </div>
+    </div>
+
+    <!-- Crash details modal -->
+    <div id="modal-crash-details" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 800px; width: 95%;">
+            <h3><i class='bx bx-bug'></i> تفاصيل العطل</h3>
+            <p id="modal-crash-subtitle" class="modal-subtitle"></p>
+            <div class="input-group">
+                <label>معلومات المرسل</label>
+                <input type="text" id="modal-crash-sender" readonly style="background: var(--sidebar-bg);">
+            </div>
+            <div class="input-group">
+                <label>رسالة الخطأ كاملة</label>
+                <textarea id="modal-crash-msg" readonly style="min-height: 100px; background: var(--sidebar-bg);"></textarea>
+            </div>
+            <div class="input-group" id="crash-stack-group">
+                <label>Stack Trace</label>
+                <textarea id="modal-crash-stack" readonly style="min-height: 250px; font-family: monospace; font-size: 12px; background: #0a0a0a; color: #ff6b6b; direction: ltr; white-space: pre-wrap;"></textarea>
+            </div>
+            <div class="button-group" style="justify-content: flex-end;">
+                <button id="btn-close-crash-modal" class="btn outline">إغلاق</button>
+            </div>
         </div>
     </div>
 

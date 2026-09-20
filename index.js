@@ -256,7 +256,7 @@ onAuthStateChanged(auth, (user) => {
         loadRecentActivityWidget();
         logAction('sign_in', displayName);
     } else {
-        authView.classList.add('hidden');
+        authView.classList.remove('hidden');
         dashboardView.classList.add('hidden');
         stopOverviewAutoRefresh();
     }

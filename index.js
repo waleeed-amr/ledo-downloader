@@ -524,7 +524,7 @@ function openChat(uid, displayName) {
     });
 
     // Mark as read by admin
-    setDoc(doc(db, "chats", uid), { unreadAdmin: false }, { merge: true }).catch(() => {});
+    setDoc(doc(db, "chats", uid), { unreadAdmin: false }, { merge: true }).catch(() => { });
 }
 
 document.getElementById('btn-send-reply').addEventListener('click', sendChatReply);

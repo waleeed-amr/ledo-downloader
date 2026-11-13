@@ -4,8 +4,8 @@ import {
     sendPasswordResetEmail, onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
-    getFirestore, collection, getDocs, addDoc, doc, setDoc, getDoc,
-    serverTimestamp, query, orderBy, limit, onSnapshot, deleteDoc
+    getFirestore, collection, collectionGroup, getDocs, addDoc, doc, setDoc, getDoc,
+    serverTimestamp, query, orderBy, limit, onSnapshot, deleteDoc, where
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ─── Firebase Config (from your project) ───
@@ -20,6 +20,7 @@ const firebaseConfig = {
 };
 
 const VIRTUAL_DOMAIN = "@ledodown.local";
+const ADMIN_EMAIL = "waleed@ledodown.local";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -44,6 +45,7 @@ const navItems = document.querySelectorAll('.nav-item');
 const panels = document.querySelectorAll('.panel');
 
 let cachedUsers = [];
+let telegramActivity = [];
 
 // ─── SIDEBAR NAVIGATION & TAB SWITCHING ───
 export function switchTab(targetId) {
@@ -97,6 +99,9 @@ export function switchTab(targetId) {
         case 'panel-config':
             loadAppConfig();
             break;
+        case 'panel-telegram':
+            loadTelegramActivity();
+            break;
     }
 }
 
@@ -137,8 +142,16 @@ function resolveEmail(input) {
 }
 
 // ─── AUTH ───
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
     if (user) {
+        const authorized = String(user.email || '').toLowerCase() === ADMIN_EMAIL;
+        if (!authorized) {
+            authError.textContent = `دخول لوحة الأدمن مسموح فقط للحساب ${ADMIN_EMAIL}`;
+            await signOut(auth).catch(() => {});
+            authView.classList.remove('hidden');
+            dashboardView.classList.add('hidden');
+            return;
+        }
         authView.classList.add('hidden');
         dashboardView.classList.remove('hidden');
         const displayName = user.email ? user.email.replace(VIRTUAL_DOMAIN, '') : (user.displayName || 'admin');
@@ -166,6 +179,10 @@ authForm.addEventListener('submit', async (e) => {
     }
 
     const email = resolveEmail(inputVal);
+    if (email !== ADMIN_EMAIL) {
+        authError.textContent = `استخدم حساب الأدمن الوحيد: ${ADMIN_EMAIL}`;
+        return;
+    }
 
     btnSignIn.disabled = true;
     const origBtnText = btnSubmitText.textContent;
@@ -195,6 +212,10 @@ if (btnForgotPassword) {
         }
 
         const email = resolveEmail(inputVal);
+        if (email !== ADMIN_EMAIL) {
+            authError.textContent = `إعادة التعيين متاحة لحساب الأدمن فقط: ${ADMIN_EMAIL}`;
+            return;
+        }
 
         if (email.endsWith(VIRTUAL_DOMAIN)) {
             authError.textContent = 'حساب (@ledodown.local) ليس له بريد إلكتروني خارجي. تواصل مع مسؤول النظام لإعادة تعيين كلمة المرور.';
@@ -930,6 +951,301 @@ async function loadActiveUsers() {
 }
 
 document.getElementById('btn-refresh-active-users')?.addEventListener('click', loadActiveUsers);
+
+// ─── TELEGRAM BOT ACTIVITY ───
+function activityTimestamp(item) {
+    const value = item?.updatedAt || item?.createdAtMs || item?.createdAt;
+    if (typeof value?.toMillis === 'function') return value.toMillis();
+    if (typeof value?.toDate === 'function') return value.toDate().getTime();
+    if (Number.isFinite(Number(value))) return Number(value);
+    if (value?.seconds) return value.seconds * 1000;
+    const parsed = Date.parse(value || '');
+    return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+const DEFAULT_TELEGRAM_SETTINGS = {
+    enabled: true, allowVideo: true, allowAudio: true, allowDirectFiles: true,
+    allowMultipleLinks: true, maxLinks: 5, maxFileSizeMB: 50, pollIntervalSeconds: 3,
+    videoQualities: ['best', '1080p', '720p', '480p', '360p'],
+    audioFormats: ['audio-mp3', 'audio-m4a'], welcomeMessage: '', helpMessage: ''
+};
+
+async function populateTelegramAdminUsers() {
+    const select = document.getElementById('telegram-admin-user');
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = '<option value="">جارٍ تحميل المستخدمين…</option>';
+    try {
+        const [snapshot, botSettingsSnapshot] = await Promise.all([
+            getDocs(collection(db, 'users')),
+            getDocs(query(collectionGroup(db, 'account'), where('enabled', 'in', [true, false]), limit(200)))
+        ]);
+        const usersByUid = new Map(snapshot.docs.map(userDoc => [userDoc.id, { uid: userDoc.id, data: userDoc.data() }]));
+        for (const settingsDoc of botSettingsSnapshot.docs) {
+            if (settingsDoc.id !== 'telegram_bot_settings') continue;
+            const uid = settingsDoc.ref.parent.parent?.id;
+            if (uid && !usersByUid.has(uid)) usersByUid.set(uid, { uid, data: {}, hasTelegramSettings: true });
+        }
+        cachedUsers = Array.from(usersByUid.values())
+            .map(user => ({ ...user, username: user.data.username || user.data.email || user.uid.slice(0, 12) }))
+            .sort((a, b) => a.username.localeCompare(b.username, 'ar'));
+        select.replaceChildren();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = snapshot.empty ? 'لا يوجد مستخدمون' : 'اختر مستخدمًا';
+        select.appendChild(placeholder);
+        for (const user of cachedUsers) {
+            const option = document.createElement('option');
+            option.value = user.uid;
+            option.textContent = `${user.username} · ${user.uid.slice(0, 8)}`;
+            select.appendChild(option);
+        }
+        if (previous && cachedUsers.some(user => user.uid === previous)) select.value = previous;
+        if (select.value) await loadTelegramUserSettings();
+    } catch (error) {
+        select.innerHTML = '<option value="">تعذر تحميل المستخدمين</option>';
+        document.getElementById('telegram-admin-user-status').textContent = `تعذر قراءة المستخدمين: ${error.message}`;
+    }
+}
+
+function applyTelegramUserSettings(settings = DEFAULT_TELEGRAM_SETTINGS) {
+    const data = { ...DEFAULT_TELEGRAM_SETTINGS, ...(settings || {}) };
+    const checks = {
+        'telegram-control-enabled': data.enabled,
+        'telegram-control-video': data.allowVideo,
+        'telegram-control-audio': data.allowAudio,
+        'telegram-control-direct': data.allowDirectFiles,
+        'telegram-control-multiple': data.allowMultipleLinks
+    };
+    for (const [id, value] of Object.entries(checks)) document.getElementById(id).checked = value !== false;
+    document.getElementById('telegram-control-max-links').value = String(data.maxLinks || 5);
+    document.getElementById('telegram-control-max-size').value = String(data.maxFileSizeMB || 50);
+    document.getElementById('telegram-control-poll').value = String(data.pollIntervalSeconds || 3);
+    document.querySelectorAll('[data-admin-video-quality]').forEach(input => { input.checked = (data.videoQualities || []).includes(input.dataset.adminVideoQuality); });
+    document.querySelectorAll('[data-admin-audio-format]').forEach(input => { input.checked = (data.audioFormats || []).includes(input.dataset.adminAudioFormat); });
+    document.getElementById('telegram-control-welcome').value = data.welcomeMessage || '';
+    document.getElementById('telegram-control-help').value = data.helpMessage || '';
+}
+
+async function loadTelegramUserSettings() {
+    const uid = document.getElementById('telegram-admin-user')?.value;
+    const controls = document.getElementById('telegram-admin-user-controls');
+    const status = document.getElementById('telegram-admin-user-status');
+    const saveStatus = document.getElementById('telegram-admin-save-status');
+    if (saveStatus) saveStatus.textContent = '';
+    if (!uid) {
+        controls?.classList.add('hidden');
+        if (status) status.textContent = 'اختر مستخدمًا لقراءة إعدادات بوت تيليجرام الخاصة به.';
+        return;
+    }
+    if (status) status.textContent = 'جارٍ تحميل إعدادات البوت…';
+    try {
+        const snapshot = await getDoc(doc(db, 'users', uid, 'account', 'telegram_bot_settings'));
+        if (document.getElementById('telegram-admin-user')?.value !== uid) return;
+        applyTelegramUserSettings(snapshot.exists() ? snapshot.data() : DEFAULT_TELEGRAM_SETTINGS);
+        controls?.classList.remove('hidden');
+        if (status) status.textContent = snapshot.exists()
+            ? `تم تحميل إعدادات ${cachedUsers.find(user => user.uid === uid)?.username || uid}. التوكن غير متاح للوحة.`
+            : 'لا توجد إعدادات بوت محفوظة لهذا المستخدم؛ يمكنك ضبطها مسبقًا لتتزامن عند تشغيل التطبيق.';
+    } catch (error) {
+        controls?.classList.add('hidden');
+        if (status) status.textContent = `تعذر تحميل إعدادات المستخدم: ${error.message}`;
+    }
+}
+
+function collectTelegramUserSettings() {
+    const checked = id => document.getElementById(id).checked;
+    return {
+        enabled: checked('telegram-control-enabled'),
+        allowVideo: checked('telegram-control-video'),
+        allowAudio: checked('telegram-control-audio'),
+        allowDirectFiles: checked('telegram-control-direct'),
+        allowMultipleLinks: checked('telegram-control-multiple'),
+        maxLinks: Number(document.getElementById('telegram-control-max-links').value || 5),
+        maxFileSizeMB: Number(document.getElementById('telegram-control-max-size').value || 50),
+        pollIntervalSeconds: Number(document.getElementById('telegram-control-poll').value || 3),
+        videoQualities: Array.from(document.querySelectorAll('[data-admin-video-quality]:checked'), input => input.dataset.adminVideoQuality),
+        audioFormats: Array.from(document.querySelectorAll('[data-admin-audio-format]:checked'), input => input.dataset.adminAudioFormat),
+        welcomeMessage: document.getElementById('telegram-control-welcome').value.trim(),
+        helpMessage: document.getElementById('telegram-control-help').value.trim()
+    };
+}
+
+document.getElementById('telegram-admin-user')?.addEventListener('change', loadTelegramUserSettings);
+document.getElementById('btn-save-telegram-user-settings')?.addEventListener('click', async event => {
+    const uid = document.getElementById('telegram-admin-user')?.value;
+    const button = event.currentTarget;
+    const status = document.getElementById('telegram-admin-save-status');
+    if (!uid) return;
+    button.disabled = true;
+    if (status) status.textContent = 'جارٍ حفظ الإعدادات وإرسالها للمستخدم…';
+    try {
+        await setDoc(doc(db, 'users', uid, 'account', 'telegram_bot_settings'), {
+            ...collectTelegramUserSettings(),
+            updatedAt: serverTimestamp(),
+            updatedBy: auth.currentUser?.uid || ''
+        }, { merge: true });
+        if (status) status.textContent = 'تم الحفظ؛ ستصل الإعدادات إلى التطبيق عند اتصاله بـ Firebase.';
+    } catch (error) {
+        if (status) status.textContent = `تعذر الحفظ: ${error.message}`;
+    } finally { button.disabled = false; }
+});
+
+function telegramActivityState(status) {
+    if (status === 'completed') return { key: 'completed', label: 'اكتمل', icon: 'bx-check-circle' };
+    if (status === 'error') return { key: 'error', label: 'فشل', icon: 'bx-error-circle' };
+    return { key: 'running', label: status === 'starting' ? 'جارٍ التجهيز' : 'قيد التنفيذ', icon: 'bx-loader-circle' };
+}
+
+function getFilteredTelegramActivity() {
+    const term = String(document.getElementById('telegram-activity-search')?.value || '').trim().toLowerCase();
+    const filter = document.getElementById('telegram-activity-filter')?.value || 'all';
+    return telegramActivity.filter(item => {
+        const state = telegramActivityState(item.status);
+        const user = cachedUsers.find(entry => entry.uid === item.userId);
+        const searchable = [item.title, item.userId, item.downloadId, user?.username, user?.data?.email].join(' ').toLowerCase();
+        return (filter === 'all' || state.key === filter) && (!term || searchable.includes(term));
+    });
+}
+
+function renderTelegramActivity() {
+    const tbody = document.getElementById('telegram-activity-body');
+    if (!tbody) return;
+    const rows = getFilteredTelegramActivity();
+    tbody.replaceChildren();
+    if (!rows.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.className = 'empty-state';
+        td.textContent = telegramActivity.length ? 'لا توجد نتائج مطابقة للبحث أو الفلتر.' : 'لا توجد تنزيلات بوت في أحدث السجلات.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+    }
+
+    for (const item of rows) {
+        const tr = document.createElement('tr');
+        const titleCell = document.createElement('td');
+        titleCell.className = 'telegram-title-cell';
+        const title = document.createElement('strong');
+        title.textContent = item.title || 'تنزيل من بوت تيليجرام';
+        const source = document.createElement('span');
+        source.textContent = item.source || 'Telegram';
+        titleCell.append(title, source);
+
+        const userCell = document.createElement('td');
+        userCell.className = 'telegram-user-cell';
+        const user = cachedUsers.find(entry => entry.uid === item.userId);
+        const userName = user?.username || user?.data?.email || item.userId || 'غير معروف';
+        userCell.textContent = userName.length > 20 ? `${userName.slice(0, 17)}…` : userName;
+        userCell.title = userName;
+
+        const stateCell = document.createElement('td');
+        const state = telegramActivityState(item.status);
+        const stateBadge = document.createElement('span');
+        stateBadge.className = `telegram-state ${state.key}`;
+        const stateIcon = document.createElement('i');
+        stateIcon.className = `bx ${state.icon}`;
+        stateBadge.append(stateIcon, document.createTextNode(state.label));
+        stateCell.appendChild(stateBadge);
+
+        const progressCell = document.createElement('td');
+        progressCell.className = 'telegram-progress';
+        const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
+        const track = document.createElement('div');
+        track.className = 'telegram-progress-track';
+        const fill = document.createElement('span');
+        fill.style.width = `${progress}%`;
+        track.appendChild(fill);
+        const progressText = document.createElement('small');
+        progressText.textContent = `${Math.round(progress)}٪`;
+        progressCell.append(track, progressText);
+
+        const updatedCell = document.createElement('td');
+        updatedCell.textContent = formatDate(item.updatedAt || item.createdAtMs);
+
+        const idCell = document.createElement('td');
+        const idButton = document.createElement('button');
+        idButton.type = 'button';
+        idButton.className = 'telegram-id-button';
+        idButton.textContent = String(item.downloadId || item.id || '—').slice(0, 12);
+        idButton.title = 'اضغط لنسخ المعرّف';
+        idButton.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(String(item.downloadId || item.id || ''));
+                idButton.textContent = 'تم النسخ';
+                setTimeout(() => idButton.textContent = String(item.downloadId || item.id || '—').slice(0, 12), 1200);
+            } catch (_) { idButton.title = String(item.downloadId || item.id || ''); }
+        });
+        idCell.appendChild(idButton);
+        tr.append(titleCell, userCell, stateCell, progressCell, updatedCell, idCell);
+        tbody.appendChild(tr);
+    }
+}
+
+async function loadTelegramActivity() {
+    const tbody = document.getElementById('telegram-activity-body');
+    const refreshButton = document.getElementById('btn-refresh-telegram-activity');
+    const note = document.getElementById('telegram-activity-note');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-state">جارٍ تحميل سجل البوتات…</td></tr>';
+    if (refreshButton) refreshButton.disabled = true;
+    await populateTelegramAdminUsers();
+    try {
+        const activityQuery = query(collectionGroup(db, 'activity_log'), where('type', '==', 'telegram_download'), limit(200));
+        const snapshot = await getDocs(activityQuery);
+        telegramActivity = snapshot.docs
+            .map(entry => {
+                const data = entry.data();
+                return { ...data, id: entry.id, userId: entry.ref.parent.parent?.id || '' };
+            })
+            .filter(item => item.type === 'telegram_download' || item.source === 'telegram')
+            .sort((a, b) => activityTimestamp(b) - activityTimestamp(a));
+
+        const uniqueUsers = new Set(telegramActivity.map(item => item.userId).filter(Boolean));
+        const completed = telegramActivity.filter(item => item.status === 'completed').length;
+        const running = telegramActivity.filter(item => !['completed', 'error'].includes(item.status)).length;
+        document.getElementById('telegram-stat-downloads').textContent = String(telegramActivity.length);
+        document.getElementById('telegram-stat-users').textContent = String(uniqueUsers.size);
+        document.getElementById('telegram-stat-completed').textContent = String(completed);
+        document.getElementById('telegram-stat-running').textContent = String(running);
+        document.getElementById('telegram-activity-updated').textContent = `آخر تحديث: ${new Date().toLocaleTimeString('ar-EG')}`;
+        if (note) {
+            note.classList.remove('error-text');
+            note.textContent = 'يعرض القسم أحدث 200 سجل نشاط كحد أقصى. بيانات التوكن لا تغادر جهاز المستخدم.';
+        }
+        renderTelegramActivity();
+    } catch (error) {
+        console.error('Telegram activity load failed:', error);
+        telegramActivity = [];
+        if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="error-text">تعذر تحميل نشاط البوت: ${escapeHtml(error.message || 'تحقق من صلاحيات Firebase واتصال الإنترنت')}</td></tr>`;
+        if (note) {
+            note.classList.add('error-text');
+            note.textContent = 'تأكد أن قواعد Firestore تسمح للأدمن بقراءة users/{uid}/activity_log.';
+        }
+    } finally {
+        if (refreshButton) refreshButton.disabled = false;
+    }
+}
+
+document.getElementById('btn-refresh-telegram-activity')?.addEventListener('click', loadTelegramActivity);
+document.getElementById('telegram-activity-search')?.addEventListener('input', renderTelegramActivity);
+document.getElementById('telegram-activity-filter')?.addEventListener('change', renderTelegramActivity);
+document.getElementById('btn-export-telegram-activity')?.addEventListener('click', () => {
+    const rows = getFilteredTelegramActivity();
+    const csvCell = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const lines = [
+        ['العنوان', 'UID المستخدم', 'الحالة', 'التقدم', 'آخر تحديث', 'معرّف التنزيل'],
+        ...rows.map(item => [item.title, item.userId, telegramActivityState(item.status).label, `${Math.round(Number(item.progress) || 0)}%`, formatDate(item.updatedAt || item.createdAtMs), item.downloadId || item.id])
+    ];
+    const blob = new Blob(['\ufeff' + lines.map(row => row.map(csvCell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ledo-telegram-activity-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+});
 
 // ─── HELPERS ───
 function escapeHtml(str) {

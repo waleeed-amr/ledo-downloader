@@ -8,7 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23000000'/%3E%3Ctext x='50' y='68' font-size='56' font-family='system-ui,sans-serif' font-weight='800' fill='%23ffffff' text-anchor='middle'%3EL%3C/text%3E%3C/svg%3E">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="index.css?v=5.0.0">
+    <link rel="stylesheet" href="index.css?v=5.1.0">
 </head>
 <body>
 
@@ -24,7 +24,7 @@
             <form id="auth-form">
                 <div class="input-group">
                     <label for="login-username" id="label-username">اسم المستخدم أو البريد الإلكتروني</label>
-                    <input type="text" id="login-username" required placeholder="waleed أو admin@... أو بريدك">
+                    <input type="text" id="login-username" required placeholder="waleed أو waleed@ledodown.local">
                 </div>
                 <div class="input-group">
                     <label for="login-password">كلمة المرور</label>
@@ -73,6 +73,9 @@
                 </a>
                 <a href="#panel-crashes" class="nav-item" data-target="panel-crashes" onclick="window.switchTab && window.switchTab('panel-crashes')">
                     <i class='bx bx-bug'></i> <span>تقارير الأعطال</span>
+                </a>
+                <a href="#panel-telegram" class="nav-item" data-target="panel-telegram" onclick="window.switchTab && window.switchTab('panel-telegram')">
+                    <i class='bx bxl-telegram'></i> <span>بوت تيليجرام</span>
                 </a>
                 <a href="#panel-config" class="nav-item" data-target="panel-config" onclick="window.switchTab && window.switchTab('panel-config')">
                     <i class='bx bx-cog'></i> <span>إعدادات التطبيق</span>
@@ -340,6 +343,101 @@
                 </div>
             </section>
 
+            <!-- TELEGRAM BOT ACTIVITY -->
+            <section id="panel-telegram" class="panel hidden">
+                <header class="panel-header">
+                    <div>
+                        <h1><i class='bx bxl-telegram telegram-heading-icon'></i> بوت تيليجرام</h1>
+                        <p class="panel-subtitle">متابعة استخدام البوتات الشخصية من سجل Firebase، بدون عرض أو تخزين التوكنات.</p>
+                    </div>
+                    <div class="header-actions">
+                        <button id="btn-export-telegram-activity" class="btn outline btn-sm"><i class='bx bx-export'></i> تصدير CSV</button>
+                        <button id="btn-refresh-telegram-activity" class="btn primary btn-sm"><i class='bx bx-refresh'></i> تحديث النشاط</button>
+                    </div>
+                </header>
+
+                <div class="telegram-notice">
+                    <i class='bx bx-info-circle'></i>
+                    <div>
+                        <strong>البوتات مملوكة للمستخدمين</strong>
+                        <span>كل مستخدم يربط توكنه الخاص من التطبيق، والبوت يقبل محادثات خاصة متعددة. يعمل التنزيل من جهاز صاحب التوكن؛ لذلك يجب أن يظل التطبيق مفتوحًا ومتصلًا بالإنترنت. لا يمكن للوحة قراءة التوكن أو تشغيل جهاز المستخدم عن بُعد.</span>
+                    </div>
+                </div>
+
+                <div class="form-card telegram-admin-control-card">
+                    <h3><i class='bx bx-slider-alt'></i> التحكم في إعدادات بوت مستخدم</h3>
+                    <p class="form-note">تُرسل التعديلات لحساب المستخدم المختار عبر Firebase. لا يمكن تغيير التوكن من الموقع، ويمكن للمستخدم تغيير إعداداته من تطبيقه.</p>
+                    <div class="input-group">
+                        <label for="telegram-admin-user">مستخدم التطبيق</label>
+                        <select id="telegram-admin-user"><option value="">جارٍ تحميل المستخدمين…</option></select>
+                    </div>
+                    <div id="telegram-admin-user-status" class="status-text mb-1">اختر مستخدمًا لقراءة إعدادات بوت تيليجرام الخاصة به.</div>
+                    <div id="telegram-admin-user-controls" class="telegram-admin-user-controls hidden">
+                        <div class="telegram-control-toggles">
+                            <label><input id="telegram-control-enabled" type="checkbox"> تشغيل البوت</label>
+                            <label><input id="telegram-control-video" type="checkbox"> السماح بالفيديو</label>
+                            <label><input id="telegram-control-audio" type="checkbox"> السماح بالصوت</label>
+                            <label><input id="telegram-control-direct" type="checkbox"> السماح بالملفات المباشرة</label>
+                            <label><input id="telegram-control-multiple" type="checkbox"> السماح بعدة روابط</label>
+                        </div>
+                        <div class="telegram-control-grid">
+                            <div class="input-group"><label for="telegram-control-max-links">أقصى روابط في الرسالة</label><select id="telegram-control-max-links"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+                            <div class="input-group"><label for="telegram-control-max-size">أقصى حجم إرسال</label><select id="telegram-control-max-size"><option value="10">10 MB</option><option value="20">20 MB</option><option value="50">50 MB</option></select></div>
+                            <div class="input-group"><label for="telegram-control-poll">مهلة استقبال الرسائل</label><select id="telegram-control-poll"><option value="1">1 ثانية</option><option value="3">3 ثوانٍ</option><option value="5">5 ثوانٍ</option><option value="10">10 ثوانٍ</option></select></div>
+                        </div>
+                        <div class="telegram-control-choice-grid">
+                            <fieldset class="telegram-choice-set"><legend>جودات الفيديو</legend>
+                                <label><input type="checkbox" data-admin-video-quality="best"> أفضل جودة</label>
+                                <label><input type="checkbox" data-admin-video-quality="1080p"> 1080p</label>
+                                <label><input type="checkbox" data-admin-video-quality="720p"> 720p</label>
+                                <label><input type="checkbox" data-admin-video-quality="480p"> 480p</label>
+                                <label><input type="checkbox" data-admin-video-quality="360p"> 360p</label>
+                            </fieldset>
+                            <fieldset class="telegram-choice-set"><legend>صيغ الصوت</legend>
+                                <label><input type="checkbox" data-admin-audio-format="audio-mp3"> MP3</label>
+                                <label><input type="checkbox" data-admin-audio-format="audio-m4a"> M4A</label>
+                            </fieldset>
+                        </div>
+                        <div class="input-group"><label for="telegram-control-welcome">رسالة الترحيب</label><textarea id="telegram-control-welcome" maxlength="1000" rows="3" placeholder="اتركها فارغة للنص الافتراضي"></textarea></div>
+                        <div class="input-group"><label for="telegram-control-help">رسالة المساعدة</label><textarea id="telegram-control-help" maxlength="3000" rows="4" placeholder="اتركها فارغة للنص الافتراضي"></textarea></div>
+                        <button id="btn-save-telegram-user-settings" class="btn primary"><i class='bx bx-save'></i> حفظ الإعدادات للمستخدم</button>
+                        <span id="telegram-admin-save-status" class="status-text"></span>
+                    </div>
+                </div>
+
+                <div class="stats-grid telegram-stats-grid">
+                    <div class="stat-card"><div class="stat-icon"><i class='bx bx-download'></i></div><div class="stat-info"><h3>تنزيلات في السجل المعروض</h3><h2 id="telegram-stat-downloads">—</h2></div></div>
+                    <div class="stat-card"><div class="stat-icon"><i class='bx bx-user-voice'></i></div><div class="stat-info"><h3>مستخدمون نشطون في السجل</h3><h2 id="telegram-stat-users">—</h2></div></div>
+                    <div class="stat-card"><div class="stat-icon"><i class='bx bx-check-circle'></i></div><div class="stat-info"><h3>تنزيلات مكتملة</h3><h2 id="telegram-stat-completed">—</h2></div></div>
+                    <div class="stat-card"><div class="stat-icon"><i class='bx bx-loader-circle'></i></div><div class="stat-info"><h3>قيد التنفيذ / الإرسال</h3><h2 id="telegram-stat-running">—</h2></div></div>
+                </div>
+
+                <div class="telegram-toolbar">
+                    <div class="input-group telegram-search-group">
+                        <label for="telegram-activity-search">بحث بالاسم أو المستخدم أو معرّف التنزيل</label>
+                        <input id="telegram-activity-search" type="search" placeholder="اكتب جزءًا من العنوان أو UID…">
+                    </div>
+                    <div class="input-group telegram-filter-group">
+                        <label for="telegram-activity-filter">حالة التنزيل</label>
+                        <select id="telegram-activity-filter">
+                            <option value="all">كل الحالات</option>
+                            <option value="running">قيد التنفيذ</option>
+                            <option value="completed">مكتمل</option>
+                            <option value="error">فشل</option>
+                        </select>
+                    </div>
+                    <span id="telegram-activity-updated" class="telegram-updated-label">لم يتم التحديث بعد</span>
+                </div>
+
+                <div class="table-container">
+                    <table class="data-table telegram-activity-table">
+                        <thead><tr><th>العنصر</th><th>صاحب البوت</th><th>الحالة</th><th>التقدم</th><th>آخر تحديث</th><th>معرّف التنزيل</th></tr></thead>
+                        <tbody id="telegram-activity-body"><tr><td colspan="6" class="empty-state">افتح القسم واضغط تحديث النشاط.</td></tr></tbody>
+                    </table>
+                </div>
+                <p id="telegram-activity-note" class="telegram-footnote">يعرض القسم أحدث 200 سجل نشاط كحد أقصى. بيانات التوكن لا تغادر جهاز المستخدم.</p>
+            </section>
+
             <!-- APP CONFIG -->
             <section id="panel-config" class="panel hidden">
                 <header class="panel-header">
@@ -478,6 +576,6 @@
         </div>
     </div>
 
-    <script type="module" src="index.js?v=5.0.0"></script>
+    <script type="module" src="index.js?v=5.1.0"></script>
 </body>
 </html>
